@@ -220,7 +220,10 @@ class FileNode:
             self._file_size = 0
             self._physical_file_size = 0
 
-        # Any child nodes that are created later will add their own file size and physical file size to this node's.
+        # Any child nodes that are created later will add their own file size and physical file size to this node's;
+        # first we save copies to `self._base_file_size` and `self._base_physical_file_size` in case we need them later.
+        self._base_file_size: int = self._file_size
+        self._base_physical_file_size: int = self._physical_file_size
 
         self._windows_file_attributes = WindowsFileAttributes(win32file.GetFileAttributes(path))
 
@@ -403,10 +406,12 @@ class FileNode:
     @property
     def file_size(self) -> int:
         """
-        The node's base file size in bytes plus the file sizes of its children.
+        The file size of the node and its descendants in bytes.
 
-        ``FileType.REGULAR_FILE`` and ``FileType.ALTERNATE_DATA_STREAM`` nodes' base file size is the size of their
-        data; all other nodes have a base file size of zero.
+        ``FileType.REGULAR_FILE`` and ``FileType.ALTERNATE_DATA_STREAM`` nodes' file size is the size of their data; all
+        other nodes have a file size of zero.
+
+        If you do not wish to include descendants, use ``FileNode.base_file_size`` instead.
 
         See also: ``FileNode.physical_file_size``
 
@@ -415,15 +420,46 @@ class FileNode:
         return self._file_size
 
     @property
+    def base_file_size(self) -> int:
+        """
+        The file size of the node in bytes.
+
+        ``FileType.REGULAR_FILE`` and ``FileType.ALTERNATE_DATA_STREAM`` nodes' file size is the size of their data; all
+        other nodes have a file size of zero.
+
+        If you wish to include descendants, use ``FileNode.file_size`` instead.
+
+        See also: ``FileNode.base_physical_file_size``
+
+        :rtype: int
+        """
+        return self._base_file_size
+
+    @property
     def physical_file_size(self) -> int:
         """
-        The physical file size on disk of the node and its children in bytes.
+        The file size on disk of the node and its descendants in bytes.
+
+        If you do not wish to include descendants, use ``FileNode.base_physical_file_size`` instead.
 
         See also: ``FileNode.file_size``
 
         :rtype: int
         """
         return self._physical_file_size
+
+    @property
+    def base_physical_file_size(self) -> int:
+        """
+        The file size on disk of the node in bytes.
+
+        If you wish to include descendants, use ``FileNode.physical_file_size`` instead.
+
+        See also: ``FileNode.base_file_size``
+
+        :rtype: int
+        """
+        return self._base_physical_file_size
 
     @property
     def windows_file_attributes(self) -> WindowsFileAttributes:
