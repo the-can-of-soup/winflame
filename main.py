@@ -422,7 +422,7 @@ class FileNode:
     @property
     def base_file_size(self) -> int:
         """
-        The file size of the node in bytes.
+        The file size of the node in bytes, not including descendants.
 
         ``FileType.REGULAR_FILE`` and ``FileType.ALTERNATE_DATA_STREAM`` nodes' file size is the size of their data; all
         other nodes have a file size of zero.
@@ -451,7 +451,7 @@ class FileNode:
     @property
     def base_physical_file_size(self) -> int:
         """
-        The file size on disk of the node in bytes.
+        The file size on disk of the node in bytes, not including descendants.
 
         If you wish to include descendants, use ``FileNode.physical_file_size`` instead.
 
