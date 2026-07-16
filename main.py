@@ -210,15 +210,10 @@ class FileNode:
             finally:
                 handle.close()
 
-            # Notable function: `win32file.GetCompressedFileSize(path)` appears to return the size on disk of the file
-            # data, but not including other parts like metadata. The only casea where this differs from regular file
-            # size are in so-called "compressed" and "sparse" files. The former can be created with a checkbox in the
-            # "Advanced..." menu of a file's properties in File Explorer.
-
-        elif self.file_type is FileType.HARD_LINK:
-            # Hard links use the regular size of the file they target, but `0` for physical size
-            self._file_size = self.hard_link_target.file_size
-            self._physical_file_size = 0
+            # Another noteworthy function: `win32file.GetCompressedFileSize(path)` appears to return the size on disk of
+            # the file data, but not including other parts like metadata. The only casea where this differs from regular
+            # file size are in so-called "compressed" and "sparse" files. The former can be created with a checkbox in
+            # the "Advanced..." menu of a file's properties in File Explorer.
 
         else:
             # Other types use `0` for both sizes
@@ -301,7 +296,7 @@ class FileNode:
 
         :rtype: str
         """
-        return os.path.basename(self.filename_or_path) if self.is_root else self.filename_or_path
+        return os.path.basename(self._filename_or_path) if self.is_root else self._filename_or_path
 
     @property
     def path(self) -> str:
@@ -410,9 +405,8 @@ class FileNode:
         """
         The node's base file size in bytes plus the file sizes of its children.
 
-        - ``FileType.REGULAR_FILE`` and ``FileType.ALTERNATE_DATA_STREAM`` nodes' base file size is the size of their data.
-        - ``FileType.HARD_LINK`` nodes' base file size is the file size of their target node.
-        - Other nodes have a base file size of zero.
+        ``FileType.REGULAR_FILE`` and ``FileType.ALTERNATE_DATA_STREAM`` nodes' base file size is the size of their
+        data; all other nodes have a base file size of zero.
 
         See also: ``FileNode.physical_file_size``
 
