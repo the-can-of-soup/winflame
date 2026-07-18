@@ -41,8 +41,8 @@ def format_data_size(size_in_bytes: int, use_iec_units: bool = True) -> str:
 
     :param size_in_bytes: The data size in bytes.
     :type size_in_bytes: int
-    :param use_iec_units: If ``False``, the SI units are used (kilobyte, megabyte, gigabyte, etc.). If ``True``, the IEC
-        units are used instead (kibibyte, mebibyte, gibibyte, etc.).
+    :param use_iec_units: If ``True``, the IEC units are used (kibibyte, mebibyte, gibibyte, etc.). If ``False``, the SI
+        units are used (kilobyte, megabyte, gigabyte, etc.).
     :type use_iec_units: bool
     :return: The formatted data size.
     :rtype: str
@@ -69,7 +69,7 @@ def format_data_size(size_in_bytes: int, use_iec_units: bool = True) -> str:
     size_in_unit_rounded: float = round(size_in_bytes / unit_value, ndigits=2)
     if size_in_unit_rounded.is_integer():
         size_in_unit_rounded = int(size_in_unit_rounded)
-    return f'{size_in_unit_rounded} {unit_name}'
+    return f'{size_in_unit_rounded:,} {unit_name}'
 
 
 class WindowsFileAttributes(enum.Flag):
