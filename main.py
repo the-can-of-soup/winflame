@@ -1,6 +1,8 @@
 # This program only supports Windows.
 
-# TODO: Epic colored tree depiction in console of progress searching filesystem
+# TODO: Add epic colored tree depiction in console of progress searching filesystem
+# TODO: Optionally multithread searching by having different child nodes initialize on potentially different daemon threads, then calling `join` on all threads to wait for them to finish before the parent node finishes
+# TODO: Maybe I need to add the same or similar handling that I did for symlinks for junctions in the section about finding file size (because maybe junctions cannot have multiple names just like symlinks but the canonical path calculation would follow them to their destination and cause issues in later calculations, all meaning that junctions should just cause hard linking logic to be skipped in the same fashion as alternate data streams and symlinks)
 # TODO: Get total remaining space on the volume using a dedicated Windows API if the root of the file tree is the root of a volume (or at least just figure out that API for later)
 # TODO: Maybe delete `FileNote._hard_links` at end of `__init__`?
 # TODO: Maybe make global function for getting the physical size of a file? It would just be as a helper in case this file ever gets imported... yeah as im typing this im realizing i probably shouldn't do that as it is just a thin wrapper around the win32file functions that are used
