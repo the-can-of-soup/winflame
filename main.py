@@ -205,15 +205,17 @@ class FileNode:
 
         # Get file metadata
 
-        self._file_size: int
-        self._physical_file_size: int
+        self._logical_size: int
+        self._physical_size: int
+        self._total_logical_size: int
+        self._total_physical_size: int
         self._windows_file_attributes: WindowsFileAttributes
 
         if self.can_store_data:
-            # The file is a regular file or alternate data stream, so get its data size and physical size
+            # The file is a regular file or alternate data stream, so get its logical and physical size
 
-            # Get data size
-            self._file_size = os.path.getsize(path)
+            # Get logical size
+            self._logical_size = os.path.getsize(path)
 
             # Get physical size
             #
@@ -234,7 +236,7 @@ class FileNode:
                     handle, # File
                     win32file.FileStandardInfo, # FileInformationClass
                 )
-                self._physical_file_size = file_standard_info['AllocationSize']
+                self._physical_size = file_standard_info['AllocationSize']
             finally:
                 handle.close()
 
@@ -246,14 +248,12 @@ class FileNode:
         else:
             # The file does not intrinsically store data
 
-            self._file_size = 0
-            self._physical_file_size = 0
+            self._logical_size = 0
+            self._physical_size = 0
 
-        # Any child nodes that are created later will add their own file size and physical file size to this node's;
-        # first we save copies to `self._base_file_size` and `self._base_physical_file_size` so we know the size not
-        # counting descendants.
-        self._base_file_size: int = self._file_size
-        self._base_physical_file_size: int = self._physical_file_size
+        # Any child nodes that are created later will add their own logical and physical file size to this node's totals
+        self._total_logical_size = self._logical_size
+        self._total_physical_size = self._physical_size
 
         self._windows_file_attributes = WindowsFileAttributes(win32file.GetFileAttributes(path))
 
@@ -297,15 +297,15 @@ class FileNode:
             self._children = {}
 
 
-        # Propagate file size metadata to parent
+        # Merge total file size into parent
         #
-        # This is only done after creating the child nodes because they will in turn propagate their file size metadata
-        # to this node, and that should happen before we do the same.
+        # This is only done after creating the child nodes: they will in turn merge their file sizes into to this node
+        # at that point, and we only want to merge our total once it is final.
         if not self.is_root:
             # noinspection PyProtectedMember, PyUnresolvedReferences
-            self.parent._file_size += self.file_size
+            self.parent._total_logical_size += self.total_logical_size
             # noinspection PyProtectedMember, PyUnresolvedReferences
-            self.parent._physical_file_size += self.physical_file_size
+            self.parent._total_physical_size += self.total_physical_size
 
 
     @property
@@ -462,62 +462,64 @@ class FileNode:
         return len(self._children) == 0
 
     @property
-    def file_size(self) -> int:
+    def logical_size(self) -> int:
         """
-        The file size of the node and its descendants in bytes.
+        The logical size of the node in bytes (not including descendants).
 
-        ``FileType.REGULAR_FILE`` and ``FileType.ALTERNATE_DATA_STREAM`` nodes' file size is the size of their data; all
-        other nodes have a file size of zero.
+        This is the size of the represented data as opposed to the size on disk. For the latter, use
+        ``FileNode.physical_size``.
 
-        If you do not wish to include descendants, use ``FileNode.base_file_size`` instead.
+        Nodes with a file type other than ``FileType.REGULAR_FILE`` or ``FileType.ALTERNATE_DATA_STREAM`` are considered
+        to have a logical size of zero to avoid double counting.
 
-        See also: ``FileNode.physical_file_size``
+        If you wish to include descendants, use ``FileNode.total_logical_size`` instead.
 
         :rtype: int
         """
-        return self._file_size
+        return self._logical_size
 
     @property
-    def base_file_size(self) -> int:
+    def total_logical_size(self) -> int:
         """
-        The file size of the node in bytes, not including descendants.
+        The total logical size of the node and its descendants in bytes.
 
-        ``FileType.REGULAR_FILE`` and ``FileType.ALTERNATE_DATA_STREAM`` nodes' file size is the size of their data; all
-        other nodes have a file size of zero.
+        This is the size of the represented data as opposed to the size on disk. For the latter, use
+        ``FileNode.total_physical_size``.
 
-        If you wish to include descendants, use ``FileNode.file_size`` instead.
+        Nodes with a file type other than ``FileType.REGULAR_FILE`` or ``FileType.ALTERNATE_DATA_STREAM`` are considered
+        to have a logical size of zero to avoid double counting.
 
-        See also: ``FileNode.base_physical_file_size``
+        If you do not wish to include descendants, use ``FileNode.logical_size`` instead.
 
         :rtype: int
         """
-        return self._base_file_size
+        return self._total_logical_size
 
     @property
-    def physical_file_size(self) -> int:
+    def physical_size(self) -> int:
         """
-        The file size on disk of the node and its descendants in bytes.
+        The physical size of the node in bytes, i.e. its size on disk (not including descendants).
 
-        If you do not wish to include descendants, use ``FileNode.base_physical_file_size`` instead.
+        For the size of the represented data, use ``FileNode.logical_size`` instead.
 
-        See also: ``FileNode.file_size``
+        If you want to include descendants, use ``FileNode.total_physical_size`` instead.
 
         :rtype: int
         """
-        return self._physical_file_size
+        return self._physical_size
 
     @property
-    def base_physical_file_size(self) -> int:
+    def total_physical_size(self) -> int:
         """
-        The file size on disk of the node in bytes, not including descendants.
+        The total physical size of the node and its descendants in bytes, i.e. their size on disk.
 
-        If you wish to include descendants, use ``FileNode.physical_file_size`` instead.
+        For the size of the represented data, use ``FileNode.total_logical_size`` instead.
 
-        See also: ``FileNode.base_file_size``
+        If you do not wish to include descendants, use ``FileNode.physical_size`` instead.
 
         :rtype: int
         """
-        return self._base_physical_file_size
+        return self._total_physical_size
 
     @property
     def windows_file_attributes(self) -> WindowsFileAttributes:
