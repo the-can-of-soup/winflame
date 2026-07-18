@@ -1,11 +1,17 @@
 # This program currently only supports Windows.
 
+# TODO: Get total remaining space on the volume using a dedicated Windows API if the root of the file tree is the root of a volume
+# (or at least just figure out that API for later)
+# TODO: Add proper exception handling for insufficient permissions
+# TODO: Maybe delete `FileNote._hard_links` at end of `__init__`?
+
 
 
 # IMPORTS
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 import win32file, pywintypes # pip install pywin32
 import enum
 import os
@@ -77,13 +83,26 @@ class FileType(enum.Enum):
     JUNCTION = 4
     HARD_LINK = 5
 
+    @property
+    def can_store_data(self) -> bool:
+        """
+        ``True`` if files of this type can intrinsically store data.
+
+        Only true for ``FileType.REGULAR_FILE`` and ``FileType.ALTERNATE_DATA_STREAM``.
+
+        See also: ``FileNode.can_store_data``
+
+        :rtype: bool
+        """
+        return self in (FileType.REGULAR_FILE, FileType.ALTERNATE_DATA_STREAM)
+
 
 class FileNode:
     def __init__(self, filename_or_path: str, parent: FileNode | None = None, is_ads: bool = False) -> None:
         """
         A node of a file tree.
 
-        When `__init__` is called, the filesystem will be searched recursively to build the node's descendants.
+        When ``__init__`` is called, the filesystem will be scanned recursively to build the node's descendants.
 
         :param filename_or_path: The filename of the node excluding parent directories, unless this is a root node, in
             which case it should be the absolute path of the node.
@@ -101,8 +120,8 @@ class FileNode:
             assert os.path.dirname(filename_or_path) == ''
 
         self._parent: FileNode | None = parent
-        self._is_ads: bool = is_ads
         self._filename_or_path: str = os.path.normpath(filename_or_path) # `normpath` also strips trailing slash if present
+        self._is_ads: bool = is_ads
 
 
         # Set tree-wide globals
@@ -111,14 +130,19 @@ class FileNode:
         self._hard_links: dict[str, list[str]]
         self._hard_link_targets: dict[str, FileNode]
 
-        if parent is None:
+        if self.is_root:
             self._root = self
             self._hard_links = {}
             self._hard_link_targets = {}
         else:
-            self._root = parent._root
-            self._hard_links = parent._hard_links
-            self._hard_link_targets = parent._hard_link_targets
+            self._root = self.parent._root
+            self._hard_links = self.parent._hard_links
+            self._hard_link_targets = self.parent._hard_link_targets
+
+
+        # Set other basic attributes
+
+        self._depth: int = 0 if self.is_root else self.parent.depth + 1
 
 
         # Get all names (hard links) of the file as absolute paths, and get its hard link target (the first discovered
@@ -127,7 +151,7 @@ class FileNode:
         self._hard_link_target: FileNode
 
         path: str = self.path
-        is_labeled_hard_link: bool = (not is_ads) and path in self._hard_links
+        is_labeled_hard_link: bool = (not self.is_ads) and path in self._hard_links
 
         if is_labeled_hard_link:
             # The node has multiple names and is not the first discovered, so it is labeled a hard link.
@@ -136,13 +160,13 @@ class FileNode:
             # Because this name cluster has already been discovered, the list of names is already stored in
             # `self._hard_links[path]`, so there is no need to set it.
 
-        elif is_ads:
+        elif self.is_ads:
             # The node is an alternate data stream, so hard links are impossible at this level; they operate per-file,
             # not per-stream.
             self._hard_link_target = self
 
         else:
-            # The node has one name or is the first of multiple names to be discovered, so it is not considered a hard
+            # The node has one name or is the first of multiple names to be discovered, so it is not labeled a hard
             # link.
             self._hard_link_target = self
 
@@ -163,7 +187,7 @@ class FileNode:
 
         self._file_type: FileType
 
-        if is_ads:
+        if self.is_ads:
             self._file_type = FileType.ALTERNATE_DATA_STREAM
         elif is_labeled_hard_link:
             self._file_type = FileType.HARD_LINK
@@ -185,10 +209,14 @@ class FileNode:
         self._physical_file_size: int
         self._windows_file_attributes: WindowsFileAttributes
 
-        if self.file_type in (FileType.REGULAR_FILE, FileType.ALTERNATE_DATA_STREAM):
-            # Regular files use their size and physical size
+        if self.can_store_data:
+            # The file is a regular file or alternate data stream, so get its data size and physical size
+
+            # Get data size
             self._file_size = os.path.getsize(path)
 
+            # Get physical size
+            #
             # This took me SOOO LONG to figure out, but it works!!!! ;)
             # noinspection PyTypeChecker
             handle: pywintypes.HANDLEType = win32file.CreateFile(
@@ -211,17 +239,19 @@ class FileNode:
                 handle.close()
 
             # Another noteworthy function: `win32file.GetCompressedFileSize(path)` appears to return the size on disk of
-            # the file data, but not including other parts like metadata. The only casea where this differs from regular
+            # the file data, but not including other parts like metadata. The only case where this differs from regular
             # file size are in so-called "compressed" and "sparse" files. The former can be created with a checkbox in
             # the "Advanced..." menu of a file's properties in File Explorer.
 
         else:
-            # Other types use `0` for both sizes
+            # The file does not intrinsically store data
+
             self._file_size = 0
             self._physical_file_size = 0
 
         # Any child nodes that are created later will add their own file size and physical file size to this node's;
-        # first we save copies to `self._base_file_size` and `self._base_physical_file_size` in case we need them later.
+        # first we save copies to `self._base_file_size` and `self._base_physical_file_size` so we know the size not
+        # counting descendants.
         self._base_file_size: int = self._file_size
         self._base_physical_file_size: int = self._physical_file_size
 
@@ -271,7 +301,6 @@ class FileNode:
         #
         # This is only done after creating the child nodes because they will in turn propagate their file size metadata
         # to this node, and that should happen before we do the same.
-
         if not self.is_root:
             # noinspection PyProtectedMember, PyUnresolvedReferences
             self.parent._file_size += self.file_size
@@ -341,9 +370,24 @@ class FileNode:
         return self._is_ads
 
     @property
+    def can_store_data(self) -> bool:
+        """
+        ``True`` if the node can intrinsically store data.
+
+        This is only true for regular files and alternate data streams.
+
+        See also: ``FileType.can_store_data``
+
+        :rtype: bool
+        """
+        return self._file_type.can_store_data
+
+    @property
     def parent(self) -> FileNode | None:
         """
         The node's parent node, or ``None`` if it is a root node.
+
+        See also: ``FileNode.ancestors_iter``, ``FileNode.depth``
 
         :rtype: FileNode | None
         """
@@ -360,21 +404,23 @@ class FileNode:
 
         Do not mutate this dictionary externally.
 
+        See also: ``FileNode.descendants_iter``
+
         :rtype: dict[str, FileNode]
         """
         return self._children
 
     @property
-    def hard_link_target(self) -> FileNode:
+    def depth(self) -> int:
         """
-        The first node discovered that is hard linked to `self`, and therefore does not have the type
-        `FileType.HARD_LINK`.
+        The depth of the node, i.e. its number of ancestors.
 
-        If `self.file_type` is not `FileType.HARD_LINK`, returns `self`.
+        See also: ``FileNode.ancestors_iter``
 
-        :rtype: FileNode
+        :return: The depth of the node.
+        :rtype: int
         """
-        return self._hard_link_target
+        return self._depth
 
     @property
     def root(self) -> FileNode:
@@ -384,6 +430,18 @@ class FileNode:
         :rtype: FileNode
         """
         return self._root
+
+    @property
+    def hard_link_target(self) -> FileNode:
+        """
+        The first node discovered that is hard linked to ``self``, and therefore does not have the type
+        ``FileType.HARD_LINK``.
+
+        If ``self.file_type`` is not ``FileType.HARD_LINK``, returns ``self``.
+
+        :rtype: FileNode
+        """
+        return self._hard_link_target
 
     @property
     def is_root(self) -> bool:
@@ -469,3 +527,79 @@ class FileNode:
         :rtype: WindowsFileAttributes
         """
         return self._windows_file_attributes
+
+    def ancestors_iter(self) -> Iterator[FileNode]:
+        """
+        Finds all the ancestors of the node.
+
+        See also: ``FileNode.descendants_iter``
+
+        :return: An iterator that yields the node's ancestors in order of decreasing depth.
+        :rtype: Iterator[FileNode]
+        """
+        node: FileNode = self
+
+        # Keep moving up one level until we reach the root node
+        while not node.is_root:
+            node = node.parent
+            yield node
+
+    def descendants_iter(
+            self,
+            max_depth: int | None = None,
+            leaf_only: bool = False,
+            data_only: bool = False,
+            files_only: bool = True,
+            include_self: bool = False,
+    ) -> Iterator[FileNode]:
+        """
+        Finds all the descendants of the node.
+
+        See also: ``FileNode.ancestors_iter``, ``FileNode.can_store_data``
+
+        :param max_depth: The maximum depth of the search; only descendants that are less than or equal to this depth
+            (relative to the starting node) will be included. If ``None``, the maximum depth is unlimited.
+        :type max_depth: int | None
+        :param leaf_only: If ``True``, the result is filtered to only leaf nodes (nodes that have no children).
+        :type leaf_only: bool
+        :param data_only: If ``True``, the result is filtered to only ``FileType.REGULAR_FILE`` and
+            ``FileType.ALTERNATE_DATA_STREAM`` nodes, i.e. nodes that can intrinsically store data.
+        :type data_only: bool
+        :param files_only: If ``True``, the result is filtered to only ``FileType.REGULAR_FILE`` nodes.
+        :type files_only: bool
+        :param include_self: If ``True``, the node itself will be included in the result (if the other filters allow
+            it).
+        :type include_self: bool
+        :return: An iterator that yields the node's descendants in an arbitrary order.
+        :rtype: Iterator[FileNode]
+        """
+        # Quit if maximum depth exceeded
+        if max_depth is not None and max_depth < 0:
+            return
+
+        # Yield self
+        if include_self \
+            and ((not data_only) or self.can_store_data) \
+            and ((not files_only) or self.file_type is FileType.REGULAR_FILE) \
+            and ((not leaf_only) or self.is_leaf):
+            yield self
+
+        # No need to recurse to children if we are at the maximum depth.
+        #
+        # This guard clause is not logically necessary, as there is already one at the start of the function that
+        # catches strictly more* than this one does; this guard clause is just for efficiency, to prevent unnecessary
+        # looping and calls.
+        #
+        # *It also catches cases where the `max_depth` parameter of the outermost call is negative, whereas this clause
+        # does not, because this clause would not catch those cases until after `self` has already been yielded.
+        if max_depth is not None and max_depth <= 0:
+            return
+
+        # Recursively yield descendants of children
+        for identifier, child_node in self.children.items():
+            yield from child_node.descendants_iter(
+                max_depth = None if max_depth is None else max_depth - 1,
+                leaf_only = leaf_only,
+                data_only = data_only,
+                include_self = True,
+            )
