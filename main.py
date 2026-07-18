@@ -1,5 +1,6 @@
 # This program only supports Windows.
 
+# TODO: Epic colored tree depiction in console of progress searching filesystem
 # TODO: Get total remaining space on the volume using a dedicated Windows API if the root of the file tree is the root of a volume (or at least just figure out that API for later)
 # TODO: Maybe delete `FileNote._hard_links` at end of `__init__`?
 # TODO: Maybe make global function for getting the physical size of a file? It would just be as a helper in case this file ever gets imported... yeah as im typing this im realizing i probably shouldn't do that as it is just a thin wrapper around the win32file functions that are used
