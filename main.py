@@ -1,4 +1,4 @@
-# This program currently only supports Windows.
+# This program only supports Windows.
 
 # TODO: Get total remaining space on the volume using a dedicated Windows API if the root of the file tree is the root of a volume (or at least just figure out that API for later)
 # TODO: Maybe delete `FileNote._hard_links` at end of `__init__`?
@@ -9,6 +9,11 @@
 # IMPORTS
 
 from __future__ import annotations
+
+# Validate environment
+import platform
+if platform.system() != 'Windows':
+    raise RuntimeError('This program only supports Windows')
 
 from collections.abc import Iterator
 import win32file, pywintypes # pip install pywin32
