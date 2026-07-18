@@ -1,8 +1,6 @@
 # This program currently only supports Windows.
 
-# TODO: Get total remaining space on the volume using a dedicated Windows API if the root of the file tree is the root of a volume
-# (or at least just figure out that API for later)
-# TODO: Add proper exception handling for insufficient permissions
+# TODO: Get total remaining space on the volume using a dedicated Windows API if the root of the file tree is the root of a volume (or at least just figure out that API for later)
 # TODO: Maybe delete `FileNote._hard_links` at end of `__init__`?
 
 
@@ -31,6 +29,7 @@ UNKNOWN_FILE_TYPE_COLOR: tuple[int, int, int] = (200, 200, 200)
 
 UNACCOUNTED_COLOR: tuple[int, int, int] = (200, 200, 200)
 FREE_COLOR: tuple[int, int, int] = (200, 200, 200)
+ERROR_COLOR: tuple[int, int, int] = (255, 50, 50)
 
 
 
@@ -152,7 +151,13 @@ class FileType(enum.Enum):
 
 
 class FileNode:
-    def __init__(self, filename_or_path: str, parent: FileNode | None = None, is_ads: bool = False) -> None:
+    def __init__(
+            self,
+            filename_or_path: str,
+            parent: FileNode | None = None,
+            is_ads: bool = False,
+            catch_errors: bool = True,
+    ) -> None:
         """
         A node of a file tree.
 
@@ -165,6 +170,10 @@ class FileNode:
         :type parent: FileNode | None
         :param is_ads: ``True`` if this is an alternate data stream.
         :type is_ads: bool
+        :param catch_errors: If ``True``, filesystem-related errors will be caught and saved to ``self.error``. If this
+            happens, ``self.file_type`` will be set to ``FileType.UNKNOWN``, all file sizes will be set to zero, and
+            some other attributes will be set to their empty state.
+        :type catch_errors: bool
         """
 
         # Set core attributes
@@ -199,157 +208,197 @@ class FileNode:
         self._depth: int = 0 if self.is_root else self.parent.depth + 1
 
 
-        # Get all names (hard links) of the file as absolute paths, and get its hard link target (the first discovered
-        # node that is hard linked to it)
+        self._error: Exception | None
 
-        self._hard_link_target: FileNode
+        try:
+            # Get all names (hard links) of the file as absolute paths, and get its hard link target (the first
+            # discovered node that is hard linked to it)
 
-        path: str = self.path
-        canonical_path: str = os.path.realpath(path, strict=True)
-        is_labeled_hard_link: bool = (not self.is_ads) and canonical_path in self._hard_links
+            self._hard_link_target: FileNode
 
-        if is_labeled_hard_link:
-            # The node has multiple names and is not the first discovered, so it is labeled a hard link.
-            self._hard_link_target = self._hard_link_targets[canonical_path]
+            path: str = self.path
+            canonical_path: str = os.path.realpath(path, strict=True)
+            is_symlink: bool = os.path.islink(path)
+            is_labeled_hard_link: bool = (not self.is_ads) and (not is_symlink) and canonical_path in self._hard_links
 
-            # Because this name cluster has already been discovered, the list of names is already stored in
-            # `self._hard_links[path]`, so there is no need to set it.
+            if is_labeled_hard_link:
+                # The node has multiple names and is not the first discovered, so it is labeled a hard link.
+                self._hard_link_target = self._hard_link_targets[canonical_path]
 
-        elif self.is_ads:
-            # The node is an alternate data stream, so hard links are impossible at this level; they operate per-file,
-            # not per-stream.
-            self._hard_link_target = self
+                # Because this name cluster has already been discovered, the list of names is already stored in
+                # `self._hard_links[path]`, so there is no need to set it.
 
-        else:
-            # The node has one name or is the first of multiple names to be discovered, so it is not labeled a hard
-            # link.
-            self._hard_link_target = self
+            elif self.is_ads or is_symlink:
+                # If the node is an alternate data stream, hard links are impossible at this level; they operate
+                # per-file, not per-stream.
+                #
+                # If the node is a symlink, it cannot also have multiple names, i.e. it cannot also be a hard link.
 
-            # `win32file.FindFileNames` already returns a list of absolute paths, but they begin with a slash instead of
-            # a drive letter; `os.path.abspath` fixes this.
-            # noinspection PyTypeChecker
-            all_paths = list(map(os.path.abspath, win32file.FindFileNames(canonical_path)))
+                self._hard_link_target = self
 
-            # If there are multiple names, map each of them to the list of names and a reference to `self` so that any
-            # single name can be used to retrieve them later.
-            if len(all_paths) > 1:
-                for path_ in all_paths:
-                    self._hard_links[path_] = all_paths
-                    self._hard_link_targets[path_] = self
+            else:
+                # The node has one name or is the first of multiple names to be discovered, so it is not labeled a hard
+                # link.
+                self._hard_link_target = self
 
-
-        # Get file type
-
-        self._file_type: FileType
-
-        if self.is_ads:
-            self._file_type = FileType.ALTERNATE_DATA_STREAM
-        elif is_labeled_hard_link:
-            self._file_type = FileType.HARD_LINK
-        elif os.path.islink(path):
-            self._file_type = FileType.SYMLINK
-        elif os.path.isjunction(path):
-            self._file_type = FileType.JUNCTION
-        elif os.path.isdir(path):
-            self._file_type = FileType.DIRECTORY
-        elif os.path.isfile(path):
-            self._file_type = FileType.REGULAR_FILE
-        else:
-            self._file_type = FileType.UNKNOWN
-
-
-        # Get file metadata
-
-        self._logical_size: int
-        self._physical_size: int
-        self._total_logical_size: int
-        self._total_physical_size: int
-        self._windows_file_attributes: WindowsFileAttributes
-
-        if self.can_store_data:
-            # The file is a regular file or alternate data stream, so get its logical and physical size
-
-            # Get logical size
-            self._logical_size = os.path.getsize(path)
-
-            # Get physical size
-            #
-            # This took me SOOO LONG to figure out, but it works!!!! ;)
-            # noinspection PyTypeChecker
-            handle: pywintypes.HANDLEType = win32file.CreateFile(
-                path, # fileName
-                0, # desiredAccess
-                win32file.FILE_SHARE_READ, # shareMode
-                None, # attributes
-                win32file.OPEN_EXISTING, # CreationDisposition
-                0, # flagsAndAttributes
-                None, # hTemplateFile
-            )
-            try:
+                # `win32file.FindFileNames` already returns a list of absolute paths, but they begin with a slash
+                # instead of a drive letter; `os.path.abspath` fixes this.
                 # noinspection PyTypeChecker
-                file_standard_info: dict[str, int | bool] = win32file.GetFileInformationByHandleEx(
-                    handle, # File
-                    win32file.FileStandardInfo, # FileInformationClass
+                all_paths = list(map(os.path.abspath, win32file.FindFileNames(canonical_path)))
+
+                # If there are multiple names, map each of them to the list of names and a reference to `self` so that
+                # any single name can be used to retrieve them later.
+                if len(all_paths) > 1:
+                    for path_ in all_paths:
+                        self._hard_links[path_] = all_paths
+                        self._hard_link_targets[path_] = self
+
+
+            # Get file type
+
+            self._file_type: FileType
+
+            if self.is_ads:
+                self._file_type = FileType.ALTERNATE_DATA_STREAM
+            elif is_labeled_hard_link:
+                self._file_type = FileType.HARD_LINK
+            elif is_symlink:
+                self._file_type = FileType.SYMLINK
+            elif os.path.isjunction(path):
+                self._file_type = FileType.JUNCTION
+            elif os.path.isdir(path):
+                self._file_type = FileType.DIRECTORY
+            elif os.path.isfile(path):
+                self._file_type = FileType.REGULAR_FILE
+            else:
+                self._file_type = FileType.UNKNOWN
+
+
+            # Get file metadata
+
+            self._logical_size: int
+            self._physical_size: int
+            self._total_logical_size: int
+            self._total_physical_size: int
+            self._windows_file_attributes: WindowsFileAttributes
+
+            if self.can_store_data:
+                # The file is a regular file or alternate data stream, so get its logical and physical size
+
+                # Get logical size
+                self._logical_size = os.path.getsize(path)
+
+                # Get physical size
+                #
+                # This took me SOOO LONG to figure out, but it works!!!! ;)
+                # noinspection PyTypeChecker
+                handle: pywintypes.HANDLEType = win32file.CreateFile(
+                    path, # fileName
+                    0, # desiredAccess
+                    win32file.FILE_SHARE_READ, # shareMode
+                    None, # attributes
+                    win32file.OPEN_EXISTING, # CreationDisposition
+                    0, # flagsAndAttributes
+                    None, # hTemplateFile
                 )
-                self._physical_size = file_standard_info['AllocationSize']
-            finally:
-                handle.close()
+                try:
+                    # noinspection PyTypeChecker
+                    file_standard_info: dict[str, int | bool] = win32file.GetFileInformationByHandleEx(
+                        handle, # File
+                        win32file.FileStandardInfo, # FileInformationClass
+                    )
+                    self._physical_size = file_standard_info['AllocationSize']
+                finally:
+                    handle.close()
 
-            # Another noteworthy function: `win32file.GetCompressedFileSize(path)` appears to return the size on disk of
-            # the file data, but not including other parts like metadata. The only case where this differs from regular
-            # file size are in so-called "compressed" and "sparse" files. The former can be created with a checkbox in
-            # the "Advanced..." menu of a file's properties in File Explorer.
+                # Another noteworthy function: `win32file.GetCompressedFileSize(path)` appears to return the size on
+                # disk of the file data, but not including other parts like metadata. The only case where this differs
+                # from regular file size are in so-called "compressed" and "sparse" files. The former can be created
+                # with a checkbox in the "Advanced..." menu of a file's properties in File Explorer.
 
-        else:
-            # The file does not intrinsically store data
+            else:
+                # The file does not intrinsically store data
 
+                self._logical_size = 0
+                self._physical_size = 0
+
+            # Any child nodes that are created later will add their own logical and physical file size to this node's
+            # respective totals.
+            self._total_logical_size = self._logical_size
+            self._total_physical_size = self._physical_size
+
+            self._windows_file_attributes = WindowsFileAttributes(win32file.GetFileAttributes(path))
+
+
+            # We may only access attributes of the parent node in this function that are defined above this point.
+
+
+            # Create child nodes
+
+            self._children: dict[str, FileNode]
+
+            if self.file_type is FileType.DIRECTORY:
+                # Create a child node for each file in the directory
+
+                child_filenames: list[str] = os.listdir(path)
+                self._children = {filename: FileNode(
+                    filename,
+                    parent=self,
+                    catch_errors=catch_errors,
+                ) for filename in child_filenames}
+
+            elif self.file_type is FileType.REGULAR_FILE:
+                # Create a child node for each alternate data stream
+
+                self._children = {}
+
+                for stream_file_size, stream_suffix in win32file.FindStreams(path):
+                    # `stream_suffix` is of the form ":<stream_name>:<stream_type>".
+                    stream_name, stream_type = stream_suffix[1:].split(':')
+
+                    # Only process alternate data streams
+                    if stream_type != '$DATA':
+                        # "$DATA" indicates a data stream.
+                        continue
+                    if stream_name == '':
+                        # An empty stream name indicates the main stream, which is not an alternate stream; it is the stream
+                        # that holds the main file data, which is already accounted for.
+                        continue
+
+                    # Create child node
+                    self._children[stream_suffix] = FileNode(
+                        self.filename + stream_suffix,
+                        parent=self,
+                        is_ads=True,
+                        catch_errors=catch_errors,
+                    )
+
+            else:
+                # Other types do not store children
+                self._children = {}
+
+
+        # Error handling
+
+        except (OSError, pywintypes.error) as error:
+            self._error = error
+
+            # Re-raise error if catching errors is disabled
+            if not catch_errors:
+                raise
+
+            # Set all attributes defined in the `try` block to their most empty state
+            self._hard_link_target = self
+            self._file_type = FileType.UNKNOWN
             self._logical_size = 0
             self._physical_size = 0
-
-        # Any child nodes that are created later will add their own logical and physical file size to this node's totals
-        self._total_logical_size = self._logical_size
-        self._total_physical_size = self._physical_size
-
-        self._windows_file_attributes = WindowsFileAttributes(win32file.GetFileAttributes(path))
-
-
-        # We may only access attributes of the parent node in this function that are defined above this point.
-
-
-        # Create child nodes
-
-        self._children: dict[str, FileNode]
-
-        if self.file_type is FileType.DIRECTORY:
-            # Create a child node for each file in the directory
-
-            child_filenames: list[str] = os.listdir(path)
-            self._children = {filename: FileNode(filename, parent=self) for filename in child_filenames}
-
-        elif self.file_type is FileType.REGULAR_FILE:
-            # Create a child node for each alternate data stream
-
+            self._total_logical_size = 0
+            self._total_physical_size = 0
+            self._windows_file_attributes = WindowsFileAttributes(0)
             self._children = {}
-
-            for stream_file_size, stream_suffix in win32file.FindStreams(path):
-                # `stream_suffix` is of the form ":<stream_name>:<stream_type>".
-                stream_name, stream_type = stream_suffix[1:].split(':')
-
-                # Only process alternate data streams
-                if stream_type != '$DATA':
-                    # "$DATA" indicates a data stream.
-                    continue
-                if stream_name == '':
-                    # An empty stream name indicates the main stream, which is not an alternate stream; it is the stream
-                    # that holds the main file data, which is already accounted for.
-                    continue
-
-                # Create child node
-                self._children[stream_suffix] = FileNode(self.filename + stream_suffix, parent=self, is_ads=True)
 
         else:
-            # Other types do not store children
-            self._children = {}
+            self._error = None
 
 
         # Merge total file size into parent
@@ -364,7 +413,13 @@ class FileNode:
 
 
     def __repr__(self) -> str:
-        return f'<{type(self).__name__}: {"Root" if self.is_root else f"Depth {self.depth}"} {self.file_type.human_readable_name} {self.filename_or_path!r}, log. {format_data_size(self.logical_size)}, phys. {format_data_size(self.physical_size)}>'
+        depth_info: str = 'Root' if self.is_root else f'Depth {self.depth}'
+
+        if self.is_error:
+            return f'<{type(self).__name__}: {depth_info} {self.filename_or_path!r}, ERROR>'
+
+        size_info: str = f', log. {format_data_size(self.logical_size)}, phys. {format_data_size(self.physical_size)}' if self.can_store_data else ''
+        return f'<{type(self).__name__}: {depth_info} {self.file_type.human_readable_name} {self.filename_or_path!r}{size_info}>'
 
     @property
     def filename_or_path(self) -> str:
@@ -408,6 +463,26 @@ class FileNode:
 
         # Otherwise, join the filename with the absolute path of the parent node.
         return os.path.join(self._parent.path, self._filename_or_path)
+
+    @property
+    def error(self) -> Exception | None:
+        """
+        The error that occurred if the node failed to be initialized, otherwise ``None``.
+
+        :rtype: Exception | None
+        """
+        return self._error
+
+    @property
+    def is_error(self) -> bool:
+        """
+        ``True`` if the node failed to be initialized.
+
+        See also: ``FileNode.error``
+
+        :rtype: bool
+        """
+        return self._error is not None
 
     @property
     def file_type(self) -> FileType:
@@ -537,6 +612,19 @@ class FileNode:
         return self._logical_size
 
     @property
+    def physical_size(self) -> int:
+        """
+        The physical size of the node in bytes, i.e. its size on disk (not including descendants).
+
+        For the size of the represented data, use ``FileNode.logical_size`` instead.
+
+        If you want to include descendants, use ``FileNode.total_physical_size`` instead.
+
+        :rtype: int
+        """
+        return self._physical_size
+
+    @property
     def total_logical_size(self) -> int:
         """
         The total logical size of the node and its descendants in bytes.
@@ -552,19 +640,6 @@ class FileNode:
         :rtype: int
         """
         return self._total_logical_size
-
-    @property
-    def physical_size(self) -> int:
-        """
-        The physical size of the node in bytes, i.e. its size on disk (not including descendants).
-
-        For the size of the represented data, use ``FileNode.logical_size`` instead.
-
-        If you want to include descendants, use ``FileNode.total_physical_size`` instead.
-
-        :rtype: int
-        """
-        return self._physical_size
 
     @property
     def total_physical_size(self) -> int:
@@ -607,9 +682,9 @@ class FileNode:
     def descendants_iter(
             self,
             max_depth: int | None = None,
-            leaf_only: bool = False,
             data_only: bool = False,
             files_only: bool = True,
+            leaf_only: bool = False,
             include_self: bool = False,
     ) -> Iterator[FileNode]:
         """
@@ -620,13 +695,13 @@ class FileNode:
         :param max_depth: The maximum depth of the search; only descendants that are less than or equal to this depth
             (relative to the starting node) will be included. If ``None``, the maximum depth is unlimited.
         :type max_depth: int | None
-        :param leaf_only: If ``True``, the result is filtered to only leaf nodes (nodes that have no children).
-        :type leaf_only: bool
         :param data_only: If ``True``, the result is filtered to only ``FileType.REGULAR_FILE`` and
             ``FileType.ALTERNATE_DATA_STREAM`` nodes, i.e. nodes that can intrinsically store data.
         :type data_only: bool
         :param files_only: If ``True``, the result is filtered to only ``FileType.REGULAR_FILE`` nodes.
         :type files_only: bool
+        :param leaf_only: If ``True``, the result is filtered to only leaf nodes (nodes that have no children).
+        :type leaf_only: bool
         :param include_self: If ``True``, the node itself will be included in the result (if the other filters allow
             it).
         :type include_self: bool
@@ -659,7 +734,8 @@ class FileNode:
         for identifier, child_node in self.children.items():
             yield from child_node.descendants_iter(
                 max_depth = None if max_depth is None else max_depth - 1,
-                leaf_only = leaf_only,
                 data_only = data_only,
+                files_only = files_only,
+                leaf_only = leaf_only,
                 include_self = True,
             )
