@@ -21,12 +21,12 @@ import os
 # CONFIG
 # All of these values are currently unused.
 
-DIRECTORY_COLOR: tuple[int, int, int] = (255, 150, 0)
-REGULAR_FILE_COLOR: tuple[int, int, int] = (0, 255, 0)
+DIRECTORY_COLOR: tuple[int, int, int] = (255, 150, 25)
+REGULAR_FILE_COLOR: tuple[int, int, int] = (50, 255, 50)
 ALTERNATE_DATA_STREAM_COLOR: tuple[int, int, int] = (255, 100, 255)
 SYMLINK_COLOR: tuple[int, int, int] = (0, 255, 255)
 JUNCTION_COLOR: tuple[int, int, int] = (255, 255, 0)
-HARD_LINK_COLOR: tuple[int, int, int] = (255, 50, 50)
+HARD_LINK_COLOR: tuple[int, int, int] = (75, 100, 255)
 UNKNOWN_FILE_TYPE_COLOR: tuple[int, int, int] = (200, 200, 200)
 
 UNACCOUNTED_COLOR: tuple[int, int, int] = (200, 200, 200)
@@ -35,6 +35,43 @@ FREE_COLOR: tuple[int, int, int] = (200, 200, 200)
 
 
 # DEFINITIONS
+
+def format_data_size(size_in_bytes: int, use_iec_units: bool = True) -> str:
+    """
+    Formats a data size in bytes into a short human-readable string.
+
+    :param size_in_bytes: The data size in bytes.
+    :type size_in_bytes: int
+    :param use_iec_units: If ``False``, the SI units are used (kilobyte, megabyte, gigabyte, etc.). If ``True``, the IEC
+        units are used instead (kibibyte, mebibyte, gibibyte, etc.).
+    :type use_iec_units: bool
+    :return: The formatted data size.
+    :rtype: str
+    """
+    # Choose unit names
+    unit_names: list[str] = [
+        'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB', 'RiB', 'QiB',
+    ] if use_iec_units else [
+        'kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB', 'RB', 'QB',
+    ]
+
+    # Choose unit
+    unit_value: int = 1
+    unit_name: str = 'B'
+    for new_unit_name in unit_names:
+        new_unit_value: int = unit_value * (1_024 if use_iec_units else 1_000)
+
+        if new_unit_value > size_in_bytes:
+            break
+        unit_value = new_unit_value
+        unit_name = new_unit_name
+
+    # Format
+    size_in_unit_rounded: float = round(size_in_bytes / unit_value, ndigits=2)
+    if size_in_unit_rounded.is_integer():
+        size_in_unit_rounded = int(size_in_unit_rounded)
+    return f'{size_in_unit_rounded} {unit_name}'
+
 
 class WindowsFileAttributes(enum.Flag):
     """
@@ -96,6 +133,23 @@ class FileType(enum.Enum):
         """
         return self in (FileType.REGULAR_FILE, FileType.ALTERNATE_DATA_STREAM)
 
+    @property
+    def human_readable_name(self) -> str:
+        """
+        A short, lowercase, human-readable name for the file type.
+
+        :rtype: str
+        """
+        return {
+            FileType.UNKNOWN: 'unknown type',
+            FileType.DIRECTORY: 'directory',
+            FileType.REGULAR_FILE: 'file',
+            FileType.ALTERNATE_DATA_STREAM: 'alt. data stream',
+            FileType.SYMLINK: 'symlink',
+            FileType.JUNCTION: 'junction',
+            FileType.HARD_LINK: 'hard link',
+        }[self]
+
 
 class FileNode:
     def __init__(self, filename_or_path: str, parent: FileNode | None = None, is_ads: bool = False) -> None:
@@ -151,11 +205,12 @@ class FileNode:
         self._hard_link_target: FileNode
 
         path: str = self.path
-        is_labeled_hard_link: bool = (not self.is_ads) and path in self._hard_links
+        canonical_path: str = os.path.realpath(path, strict=True)
+        is_labeled_hard_link: bool = (not self.is_ads) and canonical_path in self._hard_links
 
         if is_labeled_hard_link:
             # The node has multiple names and is not the first discovered, so it is labeled a hard link.
-            self._hard_link_target = self._hard_link_targets[path]
+            self._hard_link_target = self._hard_link_targets[canonical_path]
 
             # Because this name cluster has already been discovered, the list of names is already stored in
             # `self._hard_links[path]`, so there is no need to set it.
@@ -173,7 +228,7 @@ class FileNode:
             # `win32file.FindFileNames` already returns a list of absolute paths, but they begin with a slash instead of
             # a drive letter; `os.path.abspath` fixes this.
             # noinspection PyTypeChecker
-            all_paths = list(map(os.path.abspath, win32file.FindFileNames(path)))
+            all_paths = list(map(os.path.abspath, win32file.FindFileNames(canonical_path)))
 
             # If there are multiple names, map each of them to the list of names and a reference to `self` so that any
             # single name can be used to retrieve them later.
@@ -307,6 +362,9 @@ class FileNode:
             # noinspection PyProtectedMember, PyUnresolvedReferences
             self.parent._total_physical_size += self.total_physical_size
 
+
+    def __repr__(self) -> str:
+        return f'<{type(self).__name__}: {"Root" if self.is_root else f"Depth {self.depth}"} {self.file_type.human_readable_name} {self.filename_or_path!r}, log. {format_data_size(self.logical_size)}, phys. {format_data_size(self.physical_size)}>'
 
     @property
     def filename_or_path(self) -> str:
