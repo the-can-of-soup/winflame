@@ -693,7 +693,7 @@ class FileNode:
             self,
             max_depth: int | None = None,
             data_only: bool = False,
-            files_only: bool = True,
+            files_only: bool = False,
             leaf_only: bool = False,
             include_self: bool = False,
     ) -> Iterator[FileNode]:
