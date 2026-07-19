@@ -16,26 +16,13 @@ if platform.system() != 'Windows':
     raise RuntimeError('This program only supports Windows')
 
 from collections.abc import Iterator
+from collections import OrderedDict
 import win32file, pywintypes # pip install pywin32
 import enum
+import time
+import math
+import sys
 import os
-
-
-
-# CONFIG
-# All of these values are currently unused.
-
-DIRECTORY_COLOR: tuple[int, int, int] = (255, 150, 25)
-REGULAR_FILE_COLOR: tuple[int, int, int] = (50, 255, 50)
-ALTERNATE_DATA_STREAM_COLOR: tuple[int, int, int] = (255, 100, 255)
-SYMLINK_COLOR: tuple[int, int, int] = (0, 255, 255)
-JUNCTION_COLOR: tuple[int, int, int] = (255, 255, 0)
-HARD_LINK_COLOR: tuple[int, int, int] = (75, 100, 255)
-UNKNOWN_FILE_TYPE_COLOR: tuple[int, int, int] = (200, 200, 200)
-
-UNACCOUNTED_COLOR: tuple[int, int, int] = (200, 200, 200)
-FREE_COLOR: tuple[int, int, int] = (200, 200, 200)
-ERROR_COLOR: tuple[int, int, int] = (255, 50, 50)
 
 
 
@@ -76,6 +63,22 @@ def format_data_size(size_in_bytes: int, use_iec_units: bool = True) -> str:
     if size_in_unit_rounded.is_integer():
         size_in_unit_rounded = int(size_in_unit_rounded)
     return f'{size_in_unit_rounded:,} {unit_name}'
+
+
+def truncate(text: str, width: int) -> str:
+    """
+    Truncates a string if necessary to stay within a character limit.
+
+    :param text: The string to truncate.
+    :type text: str
+    :param width: The character limit.
+    :type width: int
+    :return: The truncated string, or the string as-is if it does not exceed the character limit.
+    :rtype: str
+    """
+    if len(text) > width:
+        return text[:width - 1] + '\u2026' # Truncate and replace last character with ellipsis
+    return text
 
 
 class WindowsFileAttributes(enum.Flag):
@@ -155,7 +158,17 @@ class FileType(enum.Enum):
             FileType.HARD_LINK: 'hard link',
         }[self]
 
+    @property
+    def color_rgb(self) -> tuple[int, int, int]:
+        """
+        A color in RGB format to format the file type.
 
+        :rtype: tuple[int, int, int]
+        """
+        return FILE_TYPE_COLORS[self]
+
+
+# noinspection PyProtectedMember
 class FileNode:
     def __init__(
             self,
@@ -163,6 +176,7 @@ class FileNode:
             parent: FileNode | None = None,
             is_ads: bool = False,
             catch_errors: bool = True,
+            should_report_progress: bool = True,
     ) -> None:
         """
         A node of a file tree.
@@ -180,9 +194,12 @@ class FileNode:
             happens, ``self.file_type`` will be set to ``FileType.UNKNOWN``, all file sizes will be set to zero, and
             some other attributes will be set to their empty state.
         :type catch_errors: bool
+        :param should_report_progress: If ``True``, a formatted progress report will be printed to standard output
+            periodically until initialization is complete. This attribute has no effect on non-root nodes.
+        :type should_report_progress: bool
         """
 
-        # Set core attributes
+        # Set basic attributes
 
         assert (parent is None) is os.path.isabs(filename_or_path)
         if parent is not None:
@@ -191,6 +208,11 @@ class FileNode:
         self._parent: FileNode | None = parent
         self._filename_or_path: str = os.path.normpath(filename_or_path) # `normpath` also strips trailing slash if present
         self._is_ads: bool = is_ads
+
+        self._depth: int = 0 if self.is_root else self.parent.depth + 1
+
+        self._progress_report_children: OrderedDict[str, FileNode | None] = OrderedDict()
+        self._progress_report_completed: bool = False
 
 
         # Set tree-wide globals
@@ -203,20 +225,28 @@ class FileNode:
             self._root = self
             self._hard_links = {}
             self._hard_link_targets = {}
+
+            # Root only
+            self._last_progress_report_time: float | None = None
+            self._should_report_progress: bool = should_report_progress
         else:
             self._root = self.parent._root
             self._hard_links = self.parent._hard_links
             self._hard_link_targets = self.parent._hard_link_targets
 
 
-        # Set other basic attributes
+        # Add this node to the parent node's progress report display
 
-        self._depth: int = 0 if self.is_root else self.parent.depth + 1
+        # noinspection PyProtectedMember, PyUnresolvedReferences
+        if self.root._should_report_progress and not self.is_root:
+            # noinspection PyProtectedMember, PyUnresolvedReferences
+            self.parent._progress_report_children[self.filename_or_path] = self
 
 
-        self._error: Exception | None
+        self._error: Exception | None = None
 
         try:
+
             # Get file path and canonical path
 
             path: str = self.path
@@ -344,12 +374,24 @@ class FileNode:
 
             # Create child nodes
 
+            self._report_progress_if_needed()
+
             self._children: dict[str, FileNode]
 
             if self.file_type is FileType.DIRECTORY:
                 # Create a child node for each file in the directory
 
+                # List directory contents
                 child_filenames: list[str] = os.listdir(path)
+
+                # Add each file to progress report display; the child nodes will add themselves in place of `None` once
+                # created
+                # noinspection PyUnresolvedReferences
+                if self.root._should_report_progress:
+                    for filename in child_filenames:
+                        self._progress_report_children[filename] = None
+
+                # Create child nodes
                 self._children = {filename: FileNode(
                     filename,
                     parent=self,
@@ -360,23 +402,39 @@ class FileNode:
                 # Create a child node for each alternate data stream
 
                 self._children = {}
+                filename: str = self.filename
 
-                for stream_file_size, stream_suffix in win32file.FindStreams(path):
+                # Find file streams
+                streams: list[tuple[int, str]] = win32file.FindStreams(path)
+
+                # Filter for alternate data streams
+                alternate_data_streams: list[str] = []
+                for stream_file_size, stream_suffix in streams:
                     # `stream_suffix` is of the form ":<stream_name>:<stream_type>".
                     stream_name, stream_type = stream_suffix[1:].split(':')
 
-                    # Only process alternate data streams
+                    # "$DATA" indicates a data stream.
                     if stream_type != '$DATA':
-                        # "$DATA" indicates a data stream.
-                        continue
-                    if stream_name == '':
-                        # An empty stream name indicates the main stream, which is not an alternate stream; it is the stream
-                        # that holds the main file data, which is already accounted for.
                         continue
 
-                    # Create child node
+                    # An empty stream name indicates the main stream, which is not an alternate stream; it is the stream
+                    # that holds the main file data, which is already accounted for.
+                    if stream_name == '':
+                        continue
+
+                    alternate_data_streams.append(stream_suffix)
+
+                # Add each alternate data stream name to progress report display; the child nodes will add themselves in
+                # place of `None` once created
+                # noinspection PyUnresolvedReferences
+                if self.root._should_report_progress:
+                    for stream_suffix in alternate_data_streams:
+                        self._progress_report_children[filename + stream_suffix] = None
+
+                # Create child nodes
+                for stream_suffix in alternate_data_streams:
                     self._children[stream_suffix] = FileNode(
-                        self.filename + stream_suffix,
+                        filename + stream_suffix,
                         parent=self,
                         is_ads=True,
                         catch_errors=catch_errors,
@@ -385,6 +443,9 @@ class FileNode:
             else:
                 # Other types do not store children
                 self._children = {}
+
+            # No need to display children in progress report anymore once they are all initialized
+            self._progress_report_children = OrderedDict()
 
 
         # Error handling
@@ -404,10 +465,10 @@ class FileNode:
             self._total_logical_size = 0
             self._total_physical_size = 0
             self._windows_file_attributes = WindowsFileAttributes(0)
+            self._progress_report_children = OrderedDict()
             self._children = {}
 
-        else:
-            self._error = None
+            self._report_progress_if_needed()
 
         finally:
             # We no longer need a reference to the hard link names map
@@ -419,11 +480,16 @@ class FileNode:
         # This is only done after creating the child nodes: they will in turn merge their file sizes into to this node
         # at that point, and we only want to merge our total once it is final.
         if not self.is_root:
-            # noinspection PyProtectedMember, PyUnresolvedReferences
+            # noinspection PyUnresolvedReferences
             self.parent._total_logical_size += self.total_logical_size
-            # noinspection PyProtectedMember, PyUnresolvedReferences
+            # noinspection PyUnresolvedReferences
             self.parent._total_physical_size += self.total_physical_size
 
+
+        # Mark progress report as completed
+        self._progress_report_completed = True
+        if self.is_root:
+            FileNode._clear_progress_report_display()
 
     def __repr__(self) -> str:
         depth_info: str = 'Root' if self.is_root else f'Depth {self.depth}'
@@ -676,16 +742,171 @@ class FileNode:
         """
         return self._windows_file_attributes
 
-    def ancestors_iter(self) -> Iterator[FileNode]:
+    def _format_progress(self, working_node: FileNode) -> list[str]:
+        # All lines are assumed to begin with default formatting.
+
+        lines: list[str] = []
+        r: int; g: int; b: int
+        header_line: str = ''
+
+
+        # Format header line
+
+        # Add checkbox
+        if self._progress_report_completed:
+            r, g, b = COMPLETED_COLOR
+            header_line += f'[\033[38;2;{r};{g};{b}m\u2713\033[0m] '
+        elif self.is_error:
+            r, g, b = ERROR_COLOR
+            header_line += f'[\033[38;2;{r};{g};{b}mX\033[0m] '
+        elif self is working_node:
+            header_line += '[\u2026] '
+        else:
+            header_line += '[ ] '
+
+        # Color according to file type or error
+        r, g, b = ERROR_COLOR if self.is_error else self.file_type.color_rgb
+        header_line += f'\033[38;2;{r};{g};{b}m'
+
+        # Add filename or path
+        header_line += truncate(self.filename_or_path, 50)
+        lines.append(header_line)
+
+
+        # Truncate list of children
+
+        # Get the ancestor of the working node with the same depth as this node's children (if there is one)
+        working_node_ancestor: FileNode | None = None
+        if working_node.depth > self.depth:
+            for ancestor_node in working_node.ancestors_iter(include_self=True):
+                if ancestor_node.depth == self.depth + 1:
+                    working_node_ancestor = ancestor_node
+                    break
+
+        # Get index of child to keep on screen (center of visible children)
+        keep_child_index_on_screen: int = 0
+        if working_node_ancestor is not None:
+            for i, child_node in enumerate(self._progress_report_children.values()):
+                if child_node is working_node_ancestor:
+                    keep_child_index_on_screen = i
+                    break
+
+        # Get minimum and maximum visible child indices
+        max_visible_children: int = PROGRESS_REPORT_WORKING_DEPTH_MAX_VISIBLE_CHILDREN if self.depth + 1 == working_node.depth else PROGRESS_REPORT_OUTER_MAX_VISIBLE_CHILDREN
+        min_visible_child_index: int = max(0, min(keep_child_index_on_screen - math.floor((max_visible_children - 1) / 2), len(self._progress_report_children) - max_visible_children))
+        max_visible_child_index: int = min(max(max_visible_children - 1, keep_child_index_on_screen + math.ceil((max_visible_children - 1) / 2)), len(self._progress_report_children) - 1)
+
+        # Truncate list of children
+        truncated_children: list[tuple[str, FileNode | None]] = []
+        for i, (filename, child_node) in enumerate(self._progress_report_children.items()):
+            if i < min_visible_child_index: continue
+            if i > max_visible_child_index: break
+            truncated_children.append((filename, child_node))
+
+        # Check whether each end of the list was actually truncated
+        child_list_start_was_truncated: bool = min_visible_child_index > 0
+        child_list_end_was_truncated: bool = max_visible_child_index < len(self._progress_report_children) - 1
+
+
+        # Format child node lines
+
+        # Add dotted line if start of list was truncated
+        if child_list_start_was_truncated:
+            lines.append(' \u250a')
+
+        # Format each child node
+        for i, (filename, child_node) in enumerate(truncated_children):
+            is_last_child: bool = (i + min_visible_child_index) == len(self._progress_report_children) - 1
+            branching_symbol: str = '\u2570' if is_last_child else '\u251c'
+
+            if child_node is None:
+                # Node has not been created yet
+
+                line: str = ''
+
+                # Add branching symbol
+                line += ' ' + branching_symbol
+
+                # Add checkbox
+                line += '[ ] '
+
+                # Color
+                r, g, b = NOT_STARTED_COLOR
+                line += f'\033[38;2;{r};{g};{b}m'
+
+                # Add filename
+                line += truncate(filename, 50)
+
+                lines.append(line)
+
+            else:
+                # Node has been created
+
+                # Format its progress report
+                child_lines: list[str] = child_node._format_progress(working_node=working_node)
+
+                # Add branching symbol
+                child_lines[0] = ' ' + branching_symbol + child_lines[0]
+
+                # Add branching line symbols to all non-header lines
+                for j in range(1, len(child_lines)):
+                    child_lines[j] = ('  ' if is_last_child else ' \u2502') + child_lines[j]
+
+                lines.extend(child_lines)
+
+        # Add dotted line if end of list was truncated
+        if child_list_end_was_truncated:
+            lines.append(' \u250a')
+
+
+        return lines
+
+    def _report_progress(self, working_node: FileNode) -> None:
+        lines: list[str] = self._format_progress(working_node=working_node)
+        progress_report: str = '\n'.join('\033[0m' + line for line in lines) # Each line must start with default formatting
+
+        output: str = ''
+        output += '\033[0J' # Clear from cursor until end of screen
+        output += progress_report # Print progress report
+        output += '\033[G' # Move cursor to leftmost column
+        output += '\033[F' * (len(lines) - 1) # Move cursor up to start of first line
+        sys.stdout.write(output)
+        sys.stdout.flush()
+
+    @staticmethod
+    def _clear_progress_report_display() -> None:
+        sys.stdout.write('\033[0J') # Clear from cursor until end of screen
+        sys.stdout.flush()
+
+    def _report_progress_if_needed(self) -> None:
+        # Check if progress should be reported
+        if not self.root._should_report_progress:
+            return
+        now: float = time.time()
+        last_report_time: float | None = self.root._last_progress_report_time
+        if last_report_time is not None and now - last_report_time < PROGRESS_REPORT_INTERVAL:
+            return
+        self.root._last_progress_report_time = now
+
+        # Report progress
+        self.root._report_progress(working_node=self)
+
+    def ancestors_iter(self, include_self: bool = False) -> Iterator[FileNode]:
         """
         Finds all the ancestors of the node.
 
         See also: ``FileNode.descendants_iter``
 
+        :param include_self: If ``True``, the node itself will be included in the result.
+        :type include_self: bool
         :return: An iterator that yields the node's ancestors in order of decreasing depth.
         :rtype: Iterator[FileNode]
         """
         node: FileNode = self
+
+        # Yield self
+        if include_self:
+            yield self
 
         # Keep moving up one level until we reach the root node
         while not node.is_root:
@@ -752,3 +973,27 @@ class FileNode:
                 leaf_only = leaf_only,
                 include_self = True,
             )
+
+
+
+# CONFIG
+
+PROGRESS_REPORT_INTERVAL: float = 0.1 # In seconds
+PROGRESS_REPORT_OUTER_MAX_VISIBLE_CHILDREN: int = 5
+PROGRESS_REPORT_WORKING_DEPTH_MAX_VISIBLE_CHILDREN: int = 10
+
+FILE_TYPE_COLORS: dict[FileType, tuple[int, int, int]] = {
+    FileType.DIRECTORY: (255, 150, 25),
+    FileType.REGULAR_FILE: (50, 255, 50),
+    FileType.ALTERNATE_DATA_STREAM: (255, 100, 255),
+    FileType.SYMLINK: (0, 255, 255),
+    FileType.JUNCTION: (255, 255, 0),
+    FileType.HARD_LINK: (75, 100, 255),
+    FileType.UNKNOWN: (200, 200, 200),
+}
+
+NOT_STARTED_COLOR: tuple[int, int, int] = (100, 100, 100)
+COMPLETED_COLOR: tuple[int, int, int] = (50, 255, 50)
+ERROR_COLOR: tuple[int, int, int] = (255, 50, 50)
+UNACCOUNTED_COLOR: tuple[int, int, int] = (200, 200, 200)
+FREE_COLOR: tuple[int, int, int] = (200, 200, 200)
