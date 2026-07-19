@@ -3,7 +3,6 @@
 # TODO: Add epic colored tree depiction in console of progress searching filesystem
 # TODO: Optionally multithread searching by having different child nodes initialize on potentially different daemon threads, then calling `join` on all threads to wait for them to finish before the parent node finishes
 # TODO: Get total remaining space on the volume using a dedicated Windows API if the root of the file tree is the root of a volume (or at least just figure out that API for later)
-# TODO: Maybe delete `FileNote._hard_links` at end of `__init__`?
 
 
 
@@ -409,6 +408,10 @@ class FileNode:
 
         else:
             self._error = None
+
+        finally:
+            # We no longer need a reference to the hard link names map
+            del self._hard_links
 
 
         # Merge total file size into parent
