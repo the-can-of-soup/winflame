@@ -2,10 +2,8 @@
 
 # TODO: Add epic colored tree depiction in console of progress searching filesystem
 # TODO: Optionally multithread searching by having different child nodes initialize on potentially different daemon threads, then calling `join` on all threads to wait for them to finish before the parent node finishes
-# TODO: Maybe I need to add the same or similar handling that I did for symlinks for junctions in the section about finding file size (because maybe junctions cannot have multiple names just like symlinks but the canonical path calculation would follow them to their destination and cause issues in later calculations, all meaning that junctions should just cause hard linking logic to be skipped in the same fashion as alternate data streams and symlinks)
 # TODO: Get total remaining space on the volume using a dedicated Windows API if the root of the file tree is the root of a volume (or at least just figure out that API for later)
 # TODO: Maybe delete `FileNote._hard_links` at end of `__init__`?
-# TODO: Maybe make global function for getting the physical size of a file? It would just be as a helper in case this file ever gets imported... yeah as im typing this im realizing i probably shouldn't do that as it is just a thin wrapper around the win32file functions that are used
 
 
 
@@ -220,47 +218,10 @@ class FileNode:
         self._error: Exception | None
 
         try:
-            # Get all names (hard links) of the file as absolute paths, and get its hard link target (the first
-            # discovered node that is hard linked to it)
-
-            self._hard_link_target: FileNode
+            # Get file path and canonical path
 
             path: str = self.path
             canonical_path: str = os.path.realpath(path, strict=True)
-            is_symlink: bool = os.path.islink(path)
-            is_labeled_hard_link: bool = (not self.is_ads) and (not is_symlink) and canonical_path in self._hard_links
-
-            if is_labeled_hard_link:
-                # The node has multiple names and is not the first discovered, so it is labeled a hard link.
-                self._hard_link_target = self._hard_link_targets[canonical_path]
-
-                # Because this name cluster has already been discovered, the list of names is already stored in
-                # `self._hard_links[path]`, so there is no need to set it.
-
-            elif self.is_ads or is_symlink:
-                # If the node is an alternate data stream, hard links are impossible at this level; they operate
-                # per-file, not per-stream.
-                #
-                # If the node is a symlink, it cannot also have multiple names, i.e. it cannot also be a hard link.
-
-                self._hard_link_target = self
-
-            else:
-                # The node has one name or is the first of multiple names to be discovered, so it is not labeled a hard
-                # link.
-                self._hard_link_target = self
-
-                # `win32file.FindFileNames` already returns a list of absolute paths, but they begin with a slash
-                # instead of a drive letter; `os.path.abspath` fixes this.
-                # noinspection PyTypeChecker
-                all_paths = list(map(os.path.abspath, win32file.FindFileNames(canonical_path)))
-
-                # If there are multiple names, map each of them to the list of names and a reference to `self` so that
-                # any single name can be used to retrieve them later.
-                if len(all_paths) > 1:
-                    for path_ in all_paths:
-                        self._hard_links[path_] = all_paths
-                        self._hard_link_targets[path_] = self
 
 
             # Get file type
@@ -269,18 +230,58 @@ class FileNode:
 
             if self.is_ads:
                 self._file_type = FileType.ALTERNATE_DATA_STREAM
-            elif is_labeled_hard_link:
-                self._file_type = FileType.HARD_LINK
-            elif is_symlink:
+            elif os.path.islink(path):
                 self._file_type = FileType.SYMLINK
             elif os.path.isjunction(path):
                 self._file_type = FileType.JUNCTION
+            elif canonical_path in self._hard_links:
+                self._file_type = FileType.HARD_LINK
             elif os.path.isdir(path):
                 self._file_type = FileType.DIRECTORY
             elif os.path.isfile(path):
                 self._file_type = FileType.REGULAR_FILE
             else:
                 self._file_type = FileType.UNKNOWN
+
+
+            # Get all names (hard links) of the file as absolute paths, and get its hard link target (the first
+            # discovered node that is hard linked to it, and is not labeled a hard link because it is the first)
+
+            self._hard_link_target: FileNode
+
+            if self.file_type is FileType.HARD_LINK:
+                # The node has multiple names and is not the first discovered, so it is labeled a hard link.
+                self._hard_link_target = self._hard_link_targets[canonical_path]
+
+                # Because this name cluster has already been discovered, the list of names is already stored in
+                # `self._hard_links[path]`, so there is no need to set it.
+
+            elif self.file_type in (FileType.ALTERNATE_DATA_STREAM, FileType.SYMLINK, FileType.JUNCTION):
+                # If the node is an alternate data stream, hard links are impossible at this level; they operate
+                # per-file, not per-stream.
+                #
+                # If the node is a symlink or junction, it cannot also have multiple names, i.e. it cannot also be a
+                # hard link.
+
+                self._hard_link_target = self
+
+            else:
+                # The node has one name or is the first of multiple names to be discovered, so it is not labeled a hard
+                # link.
+                self._hard_link_target = self
+
+                # `win32file.FindFileNames` returns a list of absolute paths, but they do not include a drive letter. We
+                # fix this by joining with the drive root of the node's canonical path.
+                canonical_drive_root: str = os.path.splitdrive(canonical_path)[0] + os.path.sep
+                canonical_names: list[str] = win32file.FindFileNames(canonical_path)
+                all_paths: list[str] = list(map(lambda name: os.path.join(canonical_drive_root, name), canonical_names))
+
+                # If there are multiple names, map each of them to the list of names and a reference to `self` so that
+                # any single name can be used to retrieve them later.
+                if len(all_paths) > 1:
+                    for path_ in all_paths:
+                        self._hard_links[path_] = all_paths
+                        self._hard_link_targets[path_] = self
 
 
             # Get file metadata
