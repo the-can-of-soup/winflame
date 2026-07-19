@@ -752,12 +752,12 @@ class FileNode:
         # Format header line
 
         # Add checkbox
-        if self._progress_report_completed:
-            r, g, b = COMPLETED_COLOR
-            header_line += f'[\033[38;2;{r};{g};{b}m\u2713\033[0m] '
-        elif self.is_error:
+        if self.is_error:
             r, g, b = ERROR_COLOR
             header_line += f'[\033[38;2;{r};{g};{b}mX\033[0m] '
+        elif self._progress_report_completed:
+            r, g, b = COMPLETED_COLOR
+            header_line += f'[\033[38;2;{r};{g};{b}m\u2713\033[0m] '
         elif self is working_node:
             header_line += '[\u2026] '
         else:
