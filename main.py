@@ -1,5 +1,7 @@
 # This program only supports Windows.
 
+# TODO: Make number of decimal digits for rounding in `format_data_size` a parameter
+# TODO: Decide what to do about nodes that have descendant nodes that errored in progress reports; should a check mark still be displayed, or a yellow slash to indicate that some descendants failed?
 # TODO: Maybe: Optionally multithread searching by having different child nodes initialize on potentially different daemon threads, then calling `join` on all threads to wait for them to finish before the parent node finishes
 # TODO: Get total remaining space on the volume using a dedicated Windows API if the root of the file tree is the root of a volume (or at least just figure out that API for later)
 
