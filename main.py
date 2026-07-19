@@ -1,6 +1,5 @@
 # This program only supports Windows.
 
-# TODO: Make number of decimal digits for rounding in `format_data_size` a parameter of the function
 # TODO: Decide what to do about nodes that have descendant nodes that errored in progress reports; should a check mark still be displayed, or a yellow slash to indicate that some descendants failed?
 #     Also probably make all ancestors of the working node show ellipsis in the checkbox; not just the working node itself
 # TODO: Maybe: Optionally multithread searching by having different child nodes initialize on potentially different daemon threads, then calling `join` on all threads to wait for them to finish before the parent node finishes
@@ -30,7 +29,7 @@ import os
 
 # DEFINITIONS
 
-def format_data_size(size_in_bytes: int, use_iec_units: bool = True) -> str:
+def format_data_size(size_in_bytes: int, use_iec_units: bool = True, max_fractional_digits: int = 2) -> str:
     """
     Formats a data size in bytes into a short human-readable string.
 
@@ -39,6 +38,8 @@ def format_data_size(size_in_bytes: int, use_iec_units: bool = True) -> str:
     :param use_iec_units: If ``True``, the IEC units are used (kibibyte, mebibyte, gibibyte, etc.). If ``False``, the SI
         units are used (kilobyte, megabyte, gigabyte, etc.).
     :type use_iec_units: bool
+    :param max_fractional_digits: The maximum number of fractional digits (digits after the decimal point) to use.
+    :type max_fractional_digits: int
     :return: The formatted data size.
     :rtype: str
     """
@@ -61,7 +62,7 @@ def format_data_size(size_in_bytes: int, use_iec_units: bool = True) -> str:
         unit_name = new_unit_name
 
     # Format
-    size_in_unit_rounded: float = round(size_in_bytes / unit_value, ndigits=2)
+    size_in_unit_rounded: float = round(size_in_bytes / unit_value, ndigits=max_fractional_digits)
     if size_in_unit_rounded.is_integer():
         size_in_unit_rounded = int(size_in_unit_rounded)
     return f'{size_in_unit_rounded:,} {unit_name}'
