@@ -768,7 +768,7 @@ class FileNode:
         header_line += f'\033[38;2;{r};{g};{b}m'
 
         # Add filename or path
-        header_line += truncate(self.filename_or_path, 50)
+        header_line += truncate(self.filename_or_path, PROGRESS_REPORT_MAX_FILENAME_WIDTH)
         lines.append(header_line)
 
 
@@ -834,7 +834,7 @@ class FileNode:
                 line += f'\033[38;2;{r};{g};{b}m'
 
                 # Add filename
-                line += truncate(filename, 50)
+                line += truncate(filename, PROGRESS_REPORT_MAX_FILENAME_WIDTH)
 
                 lines.append(line)
 
@@ -978,6 +978,7 @@ class FileNode:
 # CONFIG
 
 PROGRESS_REPORT_INTERVAL: float = 0.1 # In seconds
+PROGRESS_REPORT_MAX_FILENAME_WIDTH: int = 60 # In characters
 PROGRESS_REPORT_OUTER_MAX_VISIBLE_CHILDREN: int = 5
 PROGRESS_REPORT_WORKING_DEPTH_MAX_VISIBLE_CHILDREN: int = 10
 
