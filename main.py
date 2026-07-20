@@ -1,8 +1,5 @@
 # This program only supports Windows.
 
-# TODO: Decide what to do about nodes that have descendant nodes that errored in progress reports; should a check mark still be displayed, or a yellow slash to indicate that some descendants failed?
-#     Also probably make all ancestors of the working node show ellipsis in the checkbox; not just the working node itself
-# TODO: Maybe: Optionally multithread searching by having different child nodes initialize on potentially different daemon threads, then calling `join` on all threads to wait for them to finish before the parent node finishes
 # TODO: Get total remaining space on the volume using a dedicated Windows API if the root of the file tree is the root of a volume (or at least just figure out that API for later)
 
 
@@ -216,6 +213,7 @@ class FileNode:
 
         self._progress_report_children: OrderedDict[str, FileNode | None] = OrderedDict()
         self._progress_report_completed: bool = False
+        self._progress_report_descendant_error: bool = False
 
 
         # Set tree-wide globals
@@ -240,7 +238,7 @@ class FileNode:
 
         # Add this node to the parent node's progress report display
 
-        # noinspection PyProtectedMember, PyUnresolvedReferences
+        # noinspection PyUnresolvedReferences
         if self.root._should_report_progress and not self.is_root:
             # noinspection PyProtectedMember, PyUnresolvedReferences
             self.parent._progress_report_children[self.filename_or_path] = self
@@ -487,6 +485,15 @@ class FileNode:
             self.parent._total_logical_size += self.total_logical_size
             # noinspection PyUnresolvedReferences
             self.parent._total_physical_size += self.total_physical_size
+
+
+        # Propagate error status to parent's progress report
+        #
+        # This is done after creating the child nodes for the same reason as above.
+        # noinspection PyUnresolvedReferences
+        if self.root._should_report_progress and not self.is_root:
+            if not self.parent._progress_report_descendant_error:
+                self.parent._progress_report_descendant_error = self._progress_report_descendant_error or (self._error is not None)
 
 
         # Mark progress report as completed
@@ -756,12 +763,16 @@ class FileNode:
         # Format header line
 
         # Add checkbox
-        if self.is_error:
-            r, g, b = ERROR_COLOR
-            header_line += f'[\033[38;2;{r};{g};{b}mX\033[0m] '
-        elif self._progress_report_completed:
-            r, g, b = COMPLETED_COLOR
-            header_line += f'[\033[38;2;{r};{g};{b}m\u2713\033[0m] '
+        if self._progress_report_completed:
+            if self.is_error:
+                r, g, b = ERROR_COLOR
+                header_line += f'[\033[38;2;{r};{g};{b}mX\033[0m] '
+            elif self._progress_report_descendant_error:
+                r, g, b = DESCENDANT_ERROR_COLOR
+                header_line += f'[\033[38;2;{r};{g};{b}m/\033[0m] '
+            else:
+                r, g, b = COMPLETED_COLOR
+                header_line += f'[\033[38;2;{r};{g};{b}m\u2713\033[0m] '
         elif self is working_node:
             header_line += '[\u2026] '
         else:
@@ -977,11 +988,98 @@ class FileNode:
                 include_self = True,
             )
 
+    def is_ancestor(self, other_node: FileNode, include_self: bool = True) -> bool:
+        """
+        Checks whether this node is an ancestor of another node.
+
+        :param other_node: The node to check that this is an ancestor of.
+        :type other_node: FileNode
+        :param include_self: If ``True``, the node itself is also considered an ancestor.
+        :type include_self: bool
+        :return: ``True`` if ``self`` is an ancestor of ``other_node``.
+        :rtype: bool
+        """
+        # Move up the file tree starting from the other node until we reach or pass the depth of this node
+        node: FileNode = other_node
+        while self.depth < node.depth:
+            node = node.parent
+
+        # This node is an ancestor if it is the node we just found
+        return node is self and (include_self or node is not other_node)
+
+    @staticmethod
+    def deepest_common_ancestor(*nodes: FileNode) -> FileNode:
+        """
+        Finds the deepest common ancestor of a group of nodes.
+
+        :param nodes: The nodes to find the deepest common ancestor of. Must be non-empty.
+        :type nodes: FileNode
+        :return: The deepest common ancestor of all the nodes given.
+        :rtype: FileNode
+        :raises ValueError: If ``nodes`` is empty, or if not all the nodes are on the same tree. The latter can be
+            checked using ``FileNode.has_common_root`` if desired.
+        """
+        if len(nodes) == 0:
+            raise ValueError('\'nodes\' must be non-empty')
+
+        # Find the depth of the outermost node; the common ancestor must be at most this deep
+        max_depth: int = min(map(lambda node: node.depth, nodes))
+
+        # Find the ancestor of each node at that depth
+        ancestors: list[FileNode] = []
+        for node in nodes:
+            for ancestor in node.ancestors_iter(include_self=True):
+                if ancestor.depth == max_depth:
+                    ancestors.append(ancestor)
+                    break
+
+        # Move up the file tree until all the ancestors are the same
+        while True:
+            # Check if all ancestors are the same
+            common_ancestor: FileNode | None = ancestors[0]
+            for ancestor in ancestors[1:]:
+                if ancestor is not common_ancestor:
+                    common_ancestor = None
+                    break
+
+            # Finish if they are
+            if common_ancestor is not None:
+                return common_ancestor
+
+            # Otherwise ensure none of them are root
+            if any(map(lambda node: node.is_root, ancestors)):
+                raise ValueError('All nodes must be on the same file tree')
+
+            # And then move up the file tree
+            ancestors = [ancestor.parent for ancestor in ancestors]
+
+    @staticmethod
+    def has_common_root(*nodes: FileNode) -> bool:
+        """
+        Checks if a group of nodes are on the same tree, i.e. they have a common root.
+
+        :param nodes: The nodes to check if they are on the same tree.
+        :type nodes: FileNode
+        :return: ``True`` if all the nodes are on the same tree (including if ``nodes`` is empty).
+        :rtype: bool
+        """
+        # The nodes are considered to be on the same tree if no nodes are given.
+        if len(nodes) == 0:
+            return True
+
+        # Check if all nodes have the same root as the first node
+        common_root: FileNode = nodes[0].root
+        for node in nodes[1:]:
+            if node.root is not common_root:
+                return False
+
+        return True
+
 
 
 # CONFIG
 
-PROGRESS_REPORT_INTERVAL: float = 0.1 # In seconds
+PROGRESS_REPORT_INTERVAL: float = 0.2 # In seconds
 PROGRESS_REPORT_MAX_FILENAME_WIDTH: int = 60 # In characters
 PROGRESS_REPORT_OUTER_MAX_VISIBLE_CHILDREN: int = 5
 PROGRESS_REPORT_WORKING_DEPTH_MAX_VISIBLE_CHILDREN: int = 10
@@ -997,7 +1095,8 @@ FILE_TYPE_COLORS: dict[FileType, tuple[int, int, int]] = {
 }
 
 NOT_STARTED_COLOR: tuple[int, int, int] = (100, 100, 100)
-COMPLETED_COLOR: tuple[int, int, int] = (50, 255, 50)
+COMPLETED_COLOR: tuple[int, int, int] = (50, 255, 50) # Only used by the progress report checkbox; not the node itself
 ERROR_COLOR: tuple[int, int, int] = (255, 50, 50)
+DESCENDANT_ERROR_COLOR: tuple[int, int, int] = (255, 255, 0) # Only used by the progress report checkbox; not the node itself
 UNACCOUNTED_COLOR: tuple[int, int, int] = (200, 200, 200)
 FREE_COLOR: tuple[int, int, int] = (200, 200, 200)
