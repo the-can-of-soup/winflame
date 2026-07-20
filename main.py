@@ -889,7 +889,10 @@ class FileNode:
 
     @staticmethod
     def _clear_progress_report_display() -> None:
-        sys.stdout.write('\033[0J') # Clear from cursor until end of screen
+        output: str = ''
+        output += '\033[0J' # Clear from cursor until end of screen
+        output += '\033[0m' # Reset formatting
+        sys.stdout.write(output)
         sys.stdout.flush()
 
     def _report_progress_if_needed(self) -> None:
