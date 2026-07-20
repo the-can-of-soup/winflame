@@ -1100,23 +1100,27 @@ class FileNode:
 
     def create_flame_graph(
             self,
+            use_physical_size: bool = True,
+            max_depth: int | None = None,
             width: int = 1920,
             layer_height: int = 20,
-            max_depth: int | None = None,
             background_color: tuple[int, int, int, int] = (255, 255, 255, 255),
             foreground_color: tuple[int, int, int, int] = (0, 0, 0, 255),
             font: ImageFont.ImageFont | ImageFont.FreeTypeFont | None = None,
-            min_label_width: int = 50,
+            min_label_width: int = 15,
     ) -> Image.Image:
         """
         Creates a flame graph visualization of the file tree starting from this node.
 
+        :param use_physical_size: If ``True``, the physical size of nodes will be displayed. If ``False``, their logical
+            size will be displayed.
+        :type use_physical_size: bool
+        :param max_depth: Nodes deeper than this depth will not be drawn. If ``None``, there is no depth limit.
+        :type max_depth: int | None
         :param width: The width of the graph in pixels. Must be greater than ``1``.
         :type width: int
         :param layer_height: The height of each layer in pixels.
         :type layer_height: int
-        :param max_depth: Nodes deeper than this depth will not be drawn. If ``None``, there is no depth limit.
-        :type max_depth: int | None
         :param background_color: The background color of the graph in RGBA format.
         :type background_color: tuple[int, int, int, int]
         :param foreground_color: The color of the graph's text and outlines in RGBA format.
@@ -1146,7 +1150,8 @@ class FileNode:
 
         # Compute image dimensions
         height: int = layer_height * layer_count + 1 # Extra pixel for outline of rectangles on the top layer
-        pixels_per_byte: float = (width - 1) / self.total_physical_size # 1 pixel subtracted here for outline of rectangles on the right edge
+        size_bytes: int = self.total_physical_size if use_physical_size else self.total_logical_size
+        pixels_per_byte: float = (width - 1) / size_bytes # 1 pixel subtracted here for outline of rectangles on the right edge
 
         # Create image
         im: Image.Image = Image.new('RGBA', (width, height), background_color)
@@ -1154,7 +1159,7 @@ class FileNode:
 
         # Load default font if a font is not provided
         if font is None:
-            font = ImageFont.truetype('C:\\Windows\\Fonts\\consola.ttf', size=10)
+            font = ImageFont.truetype('C:\\Windows\\Fonts\\bahnschrift.ttf', size=min(10.0, layer_height * 0.6))
         
         # Define function to recursively draw nodes
         def draw_node(node: FileNode, horizontal_bytes_offset: float) -> None:
@@ -1167,8 +1172,9 @@ class FileNode:
                 fractional).
             :type horizontal_bytes_offset: float
             """
-            nonlocal layer_height
+            nonlocal use_physical_size
             nonlocal max_depth
+            nonlocal layer_height
             nonlocal foreground_color
             nonlocal font
             nonlocal min_label_width
@@ -1189,7 +1195,8 @@ class FileNode:
             rectangle_y: int = (layer_count - node.depth - 1) * layer_height
 
             # Compute rectangle width
-            rectangle_width: float = node.total_physical_size * pixels_per_byte
+            node_size_bytes: int = node.total_physical_size if use_physical_size else node.total_logical_size
+            rectangle_width: float = node_size_bytes * pixels_per_byte
 
             # Get rectangle color
             rectangle_color_rgb: tuple[int, int, int] = node.color_rgb
@@ -1197,7 +1204,10 @@ class FileNode:
 
             # Draw rectangle
             draw.rectangle(
-                [(rectangle_x, rectangle_y), (rectangle_x + rectangle_width, rectangle_y + layer_height)],
+                [
+                    (round(rectangle_x), round(rectangle_y)),
+                    (round(rectangle_x + rectangle_width), round(rectangle_y + layer_height))
+                ],
                 fill=rectangle_color,
                 outline=foreground_color,
                 width=1,
@@ -1247,7 +1257,9 @@ class FileNode:
             child_horizontal_bytes_offset: float = horizontal_bytes_offset
             for child in node.children.values():
                 draw_node(child, child_horizontal_bytes_offset)
-                child_horizontal_bytes_offset += child.total_physical_size
+
+                child_size_bytes: int = child.total_physical_size if use_physical_size else child.total_logical_size
+                child_horizontal_bytes_offset += child_size_bytes
 
         # Recursively draw nodes
         draw_node(self, 0)
