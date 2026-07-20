@@ -13,6 +13,7 @@ import platform
 if platform.system() != 'Windows':
     raise RuntimeError('This program only supports Windows')
 
+from PIL import Image, ImageDraw, ImageFont # pip install pillow
 from collections.abc import Iterator
 from collections import OrderedDict
 import win32file, pywintypes # pip install pywin32
@@ -161,7 +162,7 @@ class FileType(enum.Enum):
     @property
     def color_rgb(self) -> tuple[int, int, int]:
         """
-        A color in RGB format to format the file type.
+        A color in RGB format to display the file type.
 
         :rtype: tuple[int, int, int]
         """
@@ -446,7 +447,9 @@ class FileNode:
                 self._children = {}
 
             # No need to display children in progress report anymore once they are all initialized
-            self._progress_report_children = OrderedDict()
+            # noinspection PyUnresolvedReferences
+            if self.root._should_report_progress:
+                self._progress_report_children = OrderedDict()
 
 
         # Error handling
@@ -497,9 +500,14 @@ class FileNode:
 
 
         # Mark progress report as completed
-        self._progress_report_completed = True
-        if self.is_root:
-            FileNode._clear_progress_report_display()
+        # noinspection PyUnresolvedReferences
+        if self.root._should_report_progress:
+            self._progress_report_completed = True
+
+            # Clear progress report display if this is the root node because once the root node finishes initializing,
+            # the entire tree must've finished initializing.
+            if self.is_root:
+                FileNode._clear_progress_report_display()
 
     def __repr__(self) -> str:
         depth_info: str = 'Root' if self.is_root else f'Depth {self.depth}'
@@ -752,6 +760,18 @@ class FileNode:
         """
         return self._windows_file_attributes
 
+    @property
+    def color_rgb(self) -> tuple[int, int, int]:
+        """
+        A color in RGB format to display the node.
+
+        Mostly equivalent to ``self.file_type.color_rgb``, except there is a separate color if an error occurred (i.e.
+        if ``self.is_error`` is true).
+
+        :rtype: tuple[int, int, int]
+        """
+        return ERROR_COLOR if self.is_error else self.file_type.color_rgb
+
     def _format_progress(self, working_node: FileNode) -> list[str]:
         # All lines are assumed to begin with default formatting.
 
@@ -779,7 +799,7 @@ class FileNode:
             header_line += '[ ] '
 
         # Color according to file type or error
-        r, g, b = ERROR_COLOR if self.is_error else self.file_type.color_rgb
+        r, g, b = self.color_rgb
         header_line += f'\033[38;2;{r};{g};{b}m'
 
         # Add filename or path
@@ -1078,11 +1098,168 @@ class FileNode:
 
         return True
 
+    def create_flame_graph(
+            self,
+            width: int = 1920,
+            layer_height: int = 20,
+            max_depth: int | None = None,
+            background_color: tuple[int, int, int, int] = (255, 255, 255, 255),
+            foreground_color: tuple[int, int, int, int] = (0, 0, 0, 255),
+            font: ImageFont.ImageFont | ImageFont.FreeTypeFont | None = None,
+            min_label_width: int = 50,
+    ) -> Image.Image:
+        """
+        Creates a flame graph visualization of the file tree starting from this node.
+
+        :param width: The width of the graph in pixels. Must be greater than ``1``.
+        :type width: int
+        :param layer_height: The height of each layer in pixels.
+        :type layer_height: int
+        :param max_depth: Nodes deeper than this depth will not be drawn. If ``None``, there is no depth limit.
+        :type max_depth: int | None
+        :param background_color: The background color of the graph in RGBA format.
+        :type background_color: tuple[int, int, int, int]
+        :param foreground_color: The color of the graph's text and outlines in RGBA format.
+        :type foreground_color: tuple[int, int, int, int]
+        :param font: The font to use for node labels. If ``None``, the default font is used.
+        :type font: ImageFont.ImageFont | ImageFont.FreeTypeFont | None
+        :param min_label_width: If a node's rectangle is less than this many pixels wide, it will not get a label. Note
+            that lower values may take longer to render due to increased overall label count.
+        :type min_label_width: int
+        :return: The flame graph image.
+        :rtype: Image.Image
+        """
+        # Get number of layers
+        layer_count: int = 1
+        for node in self.descendants_iter(include_self=True):
+            if node.depth >= layer_count:
+                # Update the layer count to the depth of the deepest node plus one (to include root layer)
+                layer_count = node.depth + 1
+
+                # Enforce maximum depth if set
+                #
+                # If the maximum depth is reached, we can also exit the loop because there is no way we could find a
+                # larger acceptable depth.
+                if max_depth is not None and node.depth >= max_depth:
+                    layer_count = max_depth + 1
+                    break
+
+        # Compute image dimensions
+        height: int = layer_height * layer_count + 1 # Extra pixel for outline of rectangles on the top layer
+        pixels_per_byte: float = (width - 1) / self.total_physical_size # 1 pixel subtracted here for outline of rectangles on the right edge
+
+        # Create image
+        im: Image.Image = Image.new('RGBA', (width, height), background_color)
+        draw: ImageDraw.ImageDraw = ImageDraw.Draw(im)
+
+        # Load default font if a font is not provided
+        if font is None:
+            font = ImageFont.truetype('C:\\Windows\\Fonts\\consola.ttf', size=10)
+        
+        # Define function to recursively draw nodes
+        def draw_node(node: FileNode, horizontal_bytes_offset: float) -> None:
+            """
+            Draws a node and its descendants on the flame graph.
+
+            :param node: The node to draw.
+            :type node: FileNode
+            :param horizontal_bytes_offset: The number of bytes to offset the node horizontally in the graph (may be
+                fractional).
+            :type horizontal_bytes_offset: float
+            """
+            nonlocal layer_height
+            nonlocal max_depth
+            nonlocal foreground_color
+            nonlocal font
+            nonlocal min_label_width
+
+            nonlocal layer_count
+            nonlocal pixels_per_byte
+            nonlocal im
+            nonlocal draw
+
+            nonlocal draw_node
+            
+            # Do not draw if the node is above the maximum depth
+            if max_depth is not None and node.depth > max_depth:
+                return
+
+            # Compute rectangle (north-west corner) position
+            rectangle_x: float = horizontal_bytes_offset * pixels_per_byte
+            rectangle_y: int = (layer_count - node.depth - 1) * layer_height
+
+            # Compute rectangle width
+            rectangle_width: float = node.total_physical_size * pixels_per_byte
+
+            # Get rectangle color
+            rectangle_color_rgb: tuple[int, int, int] = node.color_rgb
+            rectangle_color: tuple[int, int, int, int] = rectangle_color_rgb + (255,)
+
+            # Draw rectangle
+            draw.rectangle(
+                [(rectangle_x, rectangle_y), (rectangle_x + rectangle_width, rectangle_y + layer_height)],
+                fill=rectangle_color,
+                outline=foreground_color,
+                width=1,
+            )
+
+            # Draw label if the rectangle is big enough
+            if rectangle_width >= min_label_width:
+
+                # Create clipping canvas for label
+                #
+                # The clipping canvas' width is the width of the rectangle, not including half of the outline, rounded
+                # down. Its height is the height of the rectangle, not including the outline.
+                label_canvas: Image.Image = Image.new('RGBA', (math.floor(rectangle_width), layer_height - 1), (0, 0, 0, 0))
+                label_canvas_draw: ImageDraw.ImageDraw = ImageDraw.Draw(label_canvas)
+
+                # Compute label (center) position relative to clipping canvas
+                #
+                # We subtract 1 from the clipping canvas' dimensions and divide by 2 to get its center.
+                label_x_on_canvas: float = (label_canvas.width - 1) / 2
+                label_y_on_canvas: float = (label_canvas.height - 1) / 2
+
+                # Draw label onto clipping canvas
+                label_canvas_draw.text(
+                    (label_x_on_canvas, label_y_on_canvas),
+                    node.filename_or_path,
+                    fill=foreground_color,
+                    font=font,
+                    anchor='mm',
+                )
+
+                # Compute clipping canvas (north-west corner) position
+                label_canvas_x: int = math.ceil(rectangle_x) # Approximately on or to the right of the left outline
+                label_canvas_y: int = rectangle_y + 1 # Exactly below the top outline
+
+                # Paste clipping canvas onto graph
+                im.alpha_composite(label_canvas, (label_canvas_x, label_canvas_y))
+
+            # No need to draw child nodes if this node is at the maximum depth.
+            #
+            # This statement isn't strictly necessary because there's a statement at the start of the function that
+            # would catch this for each child, but checking here as well saves from performing an unnecessary loop
+            # below.
+            if max_depth is not None and node.depth == max_depth:
+                return
+
+            # Draw child nodes
+            child_horizontal_bytes_offset: float = horizontal_bytes_offset
+            for child in node.children.values():
+                draw_node(child, child_horizontal_bytes_offset)
+                child_horizontal_bytes_offset += child.total_physical_size
+
+        # Recursively draw nodes
+        draw_node(self, 0)
+
+        # Return image
+        return im
+
 
 
 # CONFIG
 
-PROGRESS_REPORT_INTERVAL: float = 0.2 # In seconds
+PROGRESS_REPORT_INTERVAL: float = 0.1 # In seconds
 PROGRESS_REPORT_MAX_FILENAME_WIDTH: int = 60 # In characters
 PROGRESS_REPORT_OUTER_MAX_VISIBLE_CHILDREN: int = 5
 PROGRESS_REPORT_WORKING_DEPTH_MAX_VISIBLE_CHILDREN: int = 10
@@ -1101,5 +1278,5 @@ NOT_STARTED_COLOR: tuple[int, int, int] = (100, 100, 100)
 COMPLETED_COLOR: tuple[int, int, int] = (50, 255, 50) # Only used by the progress report checkbox; not the node itself
 ERROR_COLOR: tuple[int, int, int] = (255, 50, 50)
 DESCENDANT_ERROR_COLOR: tuple[int, int, int] = (255, 255, 0) # Only used by the progress report checkbox; not the node itself
-UNACCOUNTED_COLOR: tuple[int, int, int] = (200, 200, 200)
-FREE_COLOR: tuple[int, int, int] = (200, 200, 200)
+UNACCOUNTED_COLOR: tuple[int, int, int] = (200, 200, 200) # TODO
+FREE_COLOR: tuple[int, int, int] = (200, 200, 200) # TODO
