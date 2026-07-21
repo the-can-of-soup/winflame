@@ -1217,6 +1217,7 @@ class FileNode:
             layer_height: int = 20,
             background_color: tuple[int, int, int, int] = (255, 255, 255, 255),
             foreground_color: tuple[int, int, int, int] = (0, 0, 0, 255),
+            show_labels: bool = True,
             font: ImageFont.ImageFont | ImageFont.FreeTypeFont | None = None,
             min_label_width: int = 15,
             show_drive_free_space: bool = True,
@@ -1242,7 +1243,9 @@ class FileNode:
         :type background_color: tuple[int, int, int, int]
         :param foreground_color: The color of the graph's text and outlines in RGBA format.
         :type foreground_color: tuple[int, int, int, int]
-        :param font: The font to use for node labels. If ``None``, the default font is used.
+        :param show_labels: If ``True``, labels are drawn on nodes.
+        :type show_labels: bool
+        :param font: The font to use for node labels. If ``None``, a default font is used.
         :type font: ImageFont.ImageFont | ImageFont.FreeTypeFont | None
         :param min_label_width: If a node's rectangle is less than this many pixels wide, it will not get a label. Note
             that lower values may take longer to render due to increased overall label count.
@@ -1359,6 +1362,7 @@ class FileNode:
             nonlocal max_depth
             nonlocal layer_height
             nonlocal foreground_color
+            nonlocal show_labels
             nonlocal font
             nonlocal min_label_width
 
@@ -1406,8 +1410,8 @@ class FileNode:
                 width=1,
             )
 
-            # Draw label if the rectangle is big enough
-            if rectangle_width >= min_label_width:
+            # Draw label if labels are enabled and the rectangle is big enough
+            if show_labels and rectangle_width >= min_label_width:
 
                 # Create clipping canvas for label
                 #
