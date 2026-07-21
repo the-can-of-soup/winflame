@@ -3,3 +3,4 @@ test/
 
 output/
 cache/
+.tree_file_hashes
