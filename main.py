@@ -1,6 +1,9 @@
 # This program only supports Windows.
 
-# TODO: Get total remaining space on the volume using a dedicated Windows API if the root of the file tree is the root of a volume (or at least just figure out that API for later)
+# `pywin32` documentation: https://mhammond.github.io/pywin32/
+# Windows API reference: https://learn.microsoft.com/en-us/windows/win32/api/
+# Windows Data Access and Storage API documentation: https://learn.microsoft.com/en-us/windows/win32/api/_fs/
+# Alternate Windows API list (not sure what these are exactly): https://learn.microsoft.com/en-us/windows/win32/apiindex/windows-api-list
 
 
 
@@ -13,10 +16,11 @@ import platform
 if platform.system() != 'Windows':
     raise RuntimeError('This program only supports Windows')
 
+import win32file, winioctlcon, win32api, win32com.shell.shell, pywintypes # pip install pywin32
 from PIL import Image, ImageDraw, ImageFont # pip install pillow
 from collections.abc import Iterator
 from collections import OrderedDict
-import win32file, pywintypes # pip install pywin32
+import typing
 import enum
 import time
 import math
@@ -246,6 +250,7 @@ class FileNode:
 
 
         self._error: Exception | None = None
+        progress_report_was_updated: bool = False
 
         try:
 
@@ -273,6 +278,12 @@ class FileNode:
                 self._file_type = FileType.REGULAR_FILE
             else:
                 self._file_type = FileType.UNKNOWN
+
+
+            # Update progress report
+
+            self._report_progress_if_needed()
+            progress_report_was_updated = True
 
 
             # Get all names (hard links) of the file as absolute paths, and get its hard link target (the first
@@ -315,13 +326,19 @@ class FileNode:
                         self._hard_link_targets[path_] = self
 
 
-            # Get file metadata
+            # File metadata attributes
 
             self._logical_size: int
             self._physical_size: int
             self._total_logical_size: int
             self._total_physical_size: int
+            self._is_drive_root: bool
+            self._drive_capacity: int | None # Only set for drive roots, and `None` if we do not have admin privileges
+            self._drive_free_space: int # Only set for drive roots
             self._windows_file_attributes: WindowsFileAttributes
+
+
+            # Get file size
 
             if self.can_store_data:
                 # The file is a regular file or alternate data stream, so get its logical and physical size
@@ -331,7 +348,7 @@ class FileNode:
 
                 # Get physical size
                 #
-                # This took me SOOO LONG to figure out, but it works!!!! ;)
+                # This took me a while to figure out, but it works!!
                 # noinspection PyTypeChecker
                 handle: pywintypes.HANDLEType = win32file.CreateFile(
                     path, # fileName
@@ -368,6 +385,57 @@ class FileNode:
             self._total_logical_size = self._logical_size
             self._total_physical_size = self._physical_size
 
+
+            # Get drive capacity and free space
+
+            if self.is_root:
+                # Check if the node is a drive root
+                drive_letter: str; path_on_drive: str
+                drive_letter, path_on_drive = os.path.splitdrive(canonical_path)
+                self._is_drive_root = drive_letter != '' and path_on_drive == os.path.sep
+
+                # If it is, get drive size info
+                if self._is_drive_root:
+                    # Get drive capacity (requires administrator privileges for some reason)
+                    if win32com.shell.shell.IsUserAnAdmin():
+                        # This also took me a little while to figure out
+                        # noinspection PyTypeChecker
+                        handle: pywintypes.HANDLEType = win32file.CreateFile(
+                            fr'\\.\{drive_letter}', # fileName; e.g. `\\.\C:`
+                            win32file.GENERIC_READ, # desiredAccess
+                            win32file.FILE_SHARE_READ | win32file.FILE_SHARE_WRITE, # shareMode
+                            None, # attributes
+                            win32file.OPEN_EXISTING, # CreationDisposition
+                            0, # flagsAndAttributes
+                            None, # hTemplateFile
+                        )
+                        try:
+                            # noinspection PyTypeChecker
+                            drive_size_buffer: bytes = win32file.DeviceIoControl(
+                                handle, # Device
+                                winioctlcon.IOCTL_DISK_GET_LENGTH_INFO, # IoControlCode
+                                None, # InBuffer
+                                8, # OutBuffer
+                            )
+                            self._drive_capacity = int.from_bytes(drive_size_buffer, byteorder='little')
+                        finally:
+                            handle.close()
+                    else:
+                        # `None` indicates insufficient permissions
+                        self._drive_capacity = None
+
+                    # Get drive free space
+                    user_available_free_space: int; user_available_capacity: int; free_space: int
+                    user_available_free_space, user_available_capacity, free_space = win32api.GetDiskFreeSpaceEx(canonical_path)
+                    self._drive_free_space = free_space
+
+            else:
+                # Non-root nodes are assumed not to be a drive root
+                self._is_drive_root = False
+
+
+            # Windows file attributes
+
             self._windows_file_attributes = WindowsFileAttributes(win32file.GetFileAttributes(path))
 
 
@@ -375,8 +443,6 @@ class FileNode:
 
 
             # Create child nodes
-
-            self._report_progress_if_needed()
 
             self._children: dict[str, FileNode]
 
@@ -472,7 +538,9 @@ class FileNode:
             self._progress_report_children = OrderedDict()
             self._children = {}
 
-            self._report_progress_if_needed()
+            # Update progress report if the error occurred before it could be updated normally
+            if not progress_report_was_updated:
+                self._report_progress_if_needed()
 
         finally:
             # We no longer need a reference to the hard link names map
@@ -750,6 +818,47 @@ class FileNode:
         :rtype: int
         """
         return self._total_physical_size
+
+    @property
+    def is_drive_root(self) -> bool:
+        """
+        ``True`` if the node is a drive root.
+
+        :rtype: bool
+        """
+        return self._is_drive_root
+
+    @property
+    def drive_capacity(self) -> int | None:
+        """
+        The capacity of the drive in bytes (if the node is a drive root), or ``None`` if the node was not initialized
+        with administrator privileges.
+
+        :rtype: int | None
+        """
+        assert self._is_drive_root
+        return self._drive_capacity
+
+    @property
+    def drive_free_space(self) -> int:
+        """
+        The free space on the drive in bytes (if the node is a drive root).
+
+        :rtype: int
+        """
+        assert self._is_drive_root
+        return self._drive_free_space
+
+    @property
+    def drive_used_space(self) -> int:
+        """
+        The used space on the drive in bytes (if the node is a drive root), or ``None`` if the node was not initialized
+        with administrator privileges.
+
+        :rtype: int | None
+        """
+        assert self._is_drive_root
+        return None if self._drive_capacity is None else self._drive_capacity - self._drive_free_space
 
     @property
     def windows_file_attributes(self) -> WindowsFileAttributes:
@@ -1108,9 +1217,14 @@ class FileNode:
             foreground_color: tuple[int, int, int, int] = (0, 0, 0, 255),
             font: ImageFont.ImageFont | ImageFont.FreeTypeFont | None = None,
             min_label_width: int = 15,
+            show_drive_free_space: bool = True,
+            show_drive_unaccounted_space: bool = True,
+            show_drive_extra_counted_space: bool = True,
     ) -> Image.Image:
         """
         Creates a flame graph visualization of the file tree starting from this node.
+
+        Each "layer" of the graph corresponds to a specific node depth, with the "root layer" being this node's depth.
 
         :param use_physical_size: If ``True``, the physical size of nodes will be displayed. If ``False``, their logical
             size will be displayed.
@@ -1130,9 +1244,64 @@ class FileNode:
         :param min_label_width: If a node's rectangle is less than this many pixels wide, it will not get a label. Note
             that lower values may take longer to render due to increased overall label count.
         :type min_label_width: int
+        :param show_drive_free_space: Only applies if the node is a drive root and ``use_physical_size`` is true. If
+            ``True``, a rectangle will be drawn at the root layer representing the amount of free space on the drive.
+            Extra-counted space is not included (if the data to compute that is accessible); see
+            ``show_drive_extra_counted_space`` for info about extra-counted space.
+        :type show_drive_free_space: bool
+        :param show_drive_unaccounted_space: Only applies if the node is a drive root and ``use_physical_size`` is true.
+            If ``True``, a rectangle will be drawn at the root layer representing the amount of extra used space on the
+            drive that was not accounted for by the other nodes on the graph. For example, if Windows reports the drive
+            to have a 400 GB capacity with 100 GB of free space, but the combined size of the nodes on the graph is only
+            250 GB, the unaccounted space would be 50 GB. In practice, this should include files that the program failed
+            to retrieve the metadata of. If the file tree object structure was not created with administrator
+            privileges, the necessary data to compute this is inaccessible, and so this will not be drawn.
+        :type show_drive_unaccounted_space: bool
+        :param show_drive_extra_counted_space: Only applies if the node is a drive root and ``use_physical_size`` is
+            true. If ``True``, a rectangle will be drawn at the root layer representing the amount of space used by
+            nodes on the graph that shouldn't have been used because it overlaps the free space on the drive. For
+            example, if Windows reports the drive to have a 400 GB capacity with 100 GB of free space, but the combined
+            size of the nodes on the graph is 350 GB, the extra-counted space would be 50 GB. If the file tree object
+            structure was not created with administrator privileges, the necessary data to compute this is inaccessible,
+            and so this will not be drawn.
+        :type show_drive_extra_counted_space: bool
         :return: The flame graph image.
         :rtype: Image.Image
         """
+        # Compute drive free, unaccounted, and extra-counted space
+        #
+        # `None` means the respective statistic will not be displayed.
+
+        drive_free_space: int | None = None
+        drive_unaccounted_space: int | None = None # Negative values indicate extra-counted space
+
+        if self.is_drive_root and use_physical_size:
+            # Free space
+            if show_drive_free_space:
+                drive_free_space = self.drive_free_space
+
+                # Cap to not include extra-counted space
+                if self.drive_capacity is not None:
+                    drive_free_space = max(0, min(drive_free_space, self.drive_capacity - self.total_physical_size))
+
+            # Unaccounted/extra-counted space
+            if self.drive_capacity is not None:
+                # Compute
+                drive_unaccounted_space = self.drive_used_space - self.total_physical_size
+
+                # Check if the statistic should be shown
+                is_shown: bool = show_drive_unaccounted_space if drive_unaccounted_space >= 0 else show_drive_extra_counted_space
+                if not is_shown:
+                    drive_unaccounted_space = None
+
+
+        # Compute total graph size in bytes
+        graph_size_bytes: int = self.total_physical_size if use_physical_size else self.total_logical_size
+        if drive_free_space is not None:
+            graph_size_bytes += drive_free_space
+        if drive_unaccounted_space is not None:
+            graph_size_bytes += abs(drive_unaccounted_space)
+
         # Get number of layers
         layer_count: int = 1
         for node in self.descendants_iter(include_self=True):
@@ -1150,8 +1319,7 @@ class FileNode:
 
         # Compute image dimensions
         height: int = layer_height * layer_count + 1 # Extra pixel for outline of rectangles on the top layer
-        size_bytes: int = self.total_physical_size if use_physical_size else self.total_logical_size
-        pixels_per_byte: float = (width - 1) / size_bytes # 1 pixel subtracted here for outline of rectangles on the right edge
+        pixels_per_byte: float = (width - 1) / graph_size_bytes # 1 pixel subtracted here for outline of rectangles on the right edge
 
         # Create image
         im: Image.Image = Image.new('RGBA', (width, height), background_color)
@@ -1162,15 +1330,21 @@ class FileNode:
             font = ImageFont.truetype('C:\\Windows\\Fonts\\bahnschrift.ttf', size=min(10.0, layer_height * 0.6))
         
         # Define function to recursively draw nodes
-        def draw_node(node: FileNode, horizontal_bytes_offset: float) -> None:
+        def draw_node(node: FileNode | tuple[str, int, tuple[int, int, int, int]], horizontal_bytes_offset: int) -> int:
             """
-            Draws a node and its descendants on the flame graph.
+            Draws a node and its descendants or a special segment on the flame graph.
 
-            :param node: The node to draw.
-            :type node: FileNode
-            :param horizontal_bytes_offset: The number of bytes to offset the node horizontally in the graph (may be
-                fractional).
-            :type horizontal_bytes_offset: float
+            "Special segments" are drawn like a node at the root layer and have no children.
+
+            :param node: If drawing a node, the node to draw. Otherwise, a ``(label, size, color)`` tuple where
+                ``label`` is the text of the label, ``size`` is the width of the special segment in bytes, and ``color``
+                is the color of the special segment in RGBA format.
+            :type node: FileNode | tuple[str, int, tuple[int, int, int, int]]
+            :param horizontal_bytes_offset: The number of bytes to offset the node/special segment horizontally in the
+                graph.
+            :type horizontal_bytes_offset: int
+            :return: The width of the node/special segment in bytes.
+            :rtype: int
             """
             nonlocal use_physical_size
             nonlocal max_depth
@@ -1185,22 +1359,31 @@ class FileNode:
             nonlocal draw
 
             nonlocal draw_node
+
+            # Get node/special segment properties
+            is_node: bool = isinstance(node, FileNode)
+            node_depth: int
+            node_size_bytes: int
+            if is_node:
+                node_depth = node.depth
+                node_size_bytes = node.total_physical_size if use_physical_size else node.total_logical_size
+            else:
+                node_depth = 0
+                node_size_bytes = node[1]
             
             # Do not draw if the node is above the maximum depth
-            if max_depth is not None and node.depth > max_depth:
-                return
+            if max_depth is not None and node_depth > max_depth:
+                return node_size_bytes
 
             # Compute rectangle (north-west corner) position
             rectangle_x: float = horizontal_bytes_offset * pixels_per_byte
-            rectangle_y: int = (layer_count - node.depth - 1) * layer_height
+            rectangle_y: int = (layer_count - node_depth - 1) * layer_height
 
             # Compute rectangle width
-            node_size_bytes: int = node.total_physical_size if use_physical_size else node.total_logical_size
             rectangle_width: float = node_size_bytes * pixels_per_byte
 
             # Get rectangle color
-            rectangle_color_rgb: tuple[int, int, int] = node.color_rgb
-            rectangle_color: tuple[int, int, int, int] = rectangle_color_rgb + (255,)
+            rectangle_color: tuple[int, int, int, int] = node.color_rgb + (255,) if is_node else node[2]
 
             # Draw rectangle
             draw.rectangle(
@@ -1231,11 +1414,11 @@ class FileNode:
 
                 # Draw label onto clipping canvas
                 label_canvas_draw.text(
-                    (label_x_on_canvas, label_y_on_canvas),
-                    node.filename_or_path,
-                    fill=foreground_color,
-                    font=font,
-                    anchor='mm',
+                    xy = (label_x_on_canvas, label_y_on_canvas),
+                    text = node.filename_or_path if is_node else node[0],
+                    fill = foreground_color,
+                    font = font,
+                    anchor = 'mm',
                 )
 
                 # Compute clipping canvas (north-west corner) position
@@ -1245,24 +1428,36 @@ class FileNode:
                 # Paste clipping canvas onto graph
                 im.alpha_composite(label_canvas, (label_canvas_x, label_canvas_y))
 
+            # Special segments do not have children
+            if not is_node:
+                return node_size_bytes
+
             # No need to draw child nodes if this node is at the maximum depth.
             #
             # This statement isn't strictly necessary because there's a statement at the start of the function that
             # would catch this for each child, but checking here as well saves from performing an unnecessary loop
             # below.
-            if max_depth is not None and node.depth == max_depth:
-                return
+            if max_depth is not None and node_depth == max_depth:
+                return node_size_bytes
 
             # Draw child nodes
-            child_horizontal_bytes_offset: float = horizontal_bytes_offset
+            child_horizontal_bytes_offset: int = horizontal_bytes_offset
             for child in node.children.values():
-                draw_node(child, child_horizontal_bytes_offset)
+                child_horizontal_bytes_offset += draw_node(child, child_horizontal_bytes_offset)
 
-                child_size_bytes: int = child.total_physical_size if use_physical_size else child.total_logical_size
-                child_horizontal_bytes_offset += child_size_bytes
+            return node_size_bytes
 
         # Recursively draw nodes
-        draw_node(self, 0)
+        horizontal_bytes_offset: int = 0
+        horizontal_bytes_offset += draw_node(self, horizontal_bytes_offset)
+
+        # Draw special segments
+        if drive_unaccounted_space is not None and drive_unaccounted_space >= 0:
+            horizontal_bytes_offset += draw_node(('Unaccounted', drive_unaccounted_space, UNACCOUNTED_COLOR), horizontal_bytes_offset)
+        if drive_free_space is not None:
+            horizontal_bytes_offset += draw_node(('Free', drive_free_space, FREE_COLOR), horizontal_bytes_offset)
+        if drive_unaccounted_space is not None and drive_unaccounted_space < 0:
+            horizontal_bytes_offset += draw_node(('Extra-counted', -drive_unaccounted_space, EXTRA_COUNTED_COLOR), horizontal_bytes_offset)
 
         # Return image
         return im
@@ -1290,5 +1485,7 @@ NOT_STARTED_COLOR: tuple[int, int, int] = (100, 100, 100)
 COMPLETED_COLOR: tuple[int, int, int] = (50, 255, 50) # Only used by the progress report checkbox; not the node itself
 ERROR_COLOR: tuple[int, int, int] = (255, 50, 50)
 DESCENDANT_ERROR_COLOR: tuple[int, int, int] = (255, 255, 0) # Only used by the progress report checkbox; not the node itself
-UNACCOUNTED_COLOR: tuple[int, int, int] = (200, 200, 200) # TODO
-FREE_COLOR: tuple[int, int, int] = (200, 200, 200) # TODO
+
+UNACCOUNTED_COLOR: tuple[int, int, int, int] = (255, 50, 50, 255)
+FREE_COLOR: tuple[int, int, int, int] = (200, 200, 200, 255)
+EXTRA_COUNTED_COLOR: tuple[int, int, int, int] = (255, 50, 50, 255)
