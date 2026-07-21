@@ -16,8 +16,8 @@ import platform
 if platform.system() != 'Windows':
     raise RuntimeError('This program only supports Windows')
 
-import win32file, winioctlcon, win32api, win32com.shell.shell, pywintypes # pip install pywin32
-from PIL import Image, ImageDraw, ImageFont # pip install pillow
+import win32file, winioctlcon, win32api, win32com.shell.shell, pywintypes
+from PIL import Image, ImageDraw, ImageFont
 from collections.abc import Iterator
 from collections import OrderedDict
 import enum
