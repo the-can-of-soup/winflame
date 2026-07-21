@@ -1474,7 +1474,7 @@ class FileNode:
 
 
 
-# CONFIG
+# CONSTANTS
 
 PROGRESS_REPORT_INTERVAL: float = 0.1 # In seconds
 PROGRESS_REPORT_MAX_FILENAME_WIDTH: int = 60 # In characters
