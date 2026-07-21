@@ -20,7 +20,6 @@ import win32file, winioctlcon, win32api, win32com.shell.shell, pywintypes # pip 
 from PIL import Image, ImageDraw, ImageFont # pip install pillow
 from collections.abc import Iterator
 from collections import OrderedDict
-import typing
 import enum
 import time
 import math
