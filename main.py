@@ -244,7 +244,7 @@ class FileNode:
 
         # noinspection PyUnresolvedReferences
         if self.root._should_report_progress and not self.is_root:
-            # noinspection PyProtectedMember, PyUnresolvedReferences
+            # noinspection PyUnresolvedReferences
             self.parent._progress_report_children[self.filename_or_path] = self
 
 
@@ -680,14 +680,17 @@ class FileNode:
         return self._file_type.can_store_data
 
     @property
-    def parent(self) -> FileNode | None:
+    def parent(self) -> FileNode:
         """
-        The node's parent node, or ``None`` if it is a root node.
+        The node's parent node.
 
         See also: ``FileNode.ancestors_iter``, ``FileNode.depth``
 
-        :rtype: FileNode | None
+        :rtype: FileNode
+        :raises ValueError: If the node is a root node, i.e. it has no parent.
         """
+        if self._parent is None:
+            raise ValueError('Root node has no parent')
         return self._parent
 
     @property
