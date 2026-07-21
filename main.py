@@ -1231,7 +1231,8 @@ class FileNode:
         :param use_physical_size: If ``True``, the physical size of nodes will be displayed. If ``False``, their logical
             size will be displayed.
         :type use_physical_size: bool
-        :param max_depth: Nodes deeper than this depth will not be drawn. If ``None``, there is no depth limit.
+        :param max_depth: Nodes deeper than this depth (relative to the root layer) will not be drawn. If ``None``,
+            there is no depth limit.
         :type max_depth: int | None
         :param width: The width of the graph in pixels. Must be greater than ``1``.
         :type width: int
@@ -1304,18 +1305,24 @@ class FileNode:
         if drive_unaccounted_space is not None:
             graph_size_bytes += abs(drive_unaccounted_space)
 
+        # Get base depth (depth of root layer)
+        base_depth: int = self.depth
+
         # Get number of layers
         layer_count: int = 1
         for node in self.descendants_iter(include_self=True):
-            if node.depth >= layer_count:
+            # Compute each node's depth relative to the root layer
+            relative_depth: int = node.depth - base_depth
+
+            if relative_depth >= layer_count:
                 # Update the layer count to the depth of the deepest node plus one (to include root layer)
-                layer_count = node.depth + 1
+                layer_count = relative_depth + 1
 
                 # Enforce maximum depth if set
                 #
                 # If the maximum depth is reached, we can also exit the loop because there is no way we could find a
                 # larger acceptable depth.
-                if max_depth is not None and node.depth >= max_depth:
+                if max_depth is not None and relative_depth >= max_depth:
                     layer_count = max_depth + 1
                     break
 
@@ -1355,6 +1362,7 @@ class FileNode:
             nonlocal font
             nonlocal min_label_width
 
+            nonlocal base_depth
             nonlocal layer_count
             nonlocal pixels_per_byte
             nonlocal im
@@ -1364,10 +1372,10 @@ class FileNode:
 
             # Get node/special segment properties
             is_node: bool = isinstance(node, FileNode)
-            node_depth: int
+            node_depth: int # Relative to the root layer
             node_size_bytes: int
             if is_node:
-                node_depth = node.depth
+                node_depth = node.depth - base_depth
                 node_size_bytes = node.total_physical_size if use_physical_size else node.total_logical_size
             else:
                 node_depth = 0
