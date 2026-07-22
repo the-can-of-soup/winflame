@@ -408,7 +408,7 @@ def cli(args: list[str] | None = None) -> None:
     output_dir: str = os.path.join(program_dir, OUTPUT_DIR)
 
 
-    # Command parsing
+    # Argument parsing
 
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
         prog='winflame',
