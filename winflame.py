@@ -176,7 +176,28 @@ class FileType(enum.Enum):
     @property
     def human_readable_name(self) -> str:
         """
+        A lowercase human-readable name for the file type.
+
+        See also: ``FileType.short_human_readable_name``
+
+        :rtype: str
+        """
+        return {
+            FileType.UNKNOWN: 'unknown type',
+            FileType.DIRECTORY: 'directory',
+            FileType.REGULAR_FILE: 'regular file',
+            FileType.ALTERNATE_DATA_STREAM: 'alternate data stream',
+            FileType.SYMLINK: 'symlink',
+            FileType.JUNCTION: 'junction',
+            FileType.HARD_LINK: 'hard link',
+        }[self]
+
+    @property
+    def short_human_readable_name(self) -> str:
+        """
         A short, lowercase, human-readable name for the file type.
+
+        See also: ``FileType.human_readable_name``
 
         :rtype: str
         """
@@ -612,7 +633,7 @@ class FileNode:
             return f'<{type(self).__name__}: {depth_info} {self.filename_or_path!r}, ERROR>'
 
         size_info: str = f', log. {format_data_size(self.logical_size)}, phys. {format_data_size(self.physical_size)}' if self.can_store_data else ''
-        return f'<{type(self).__name__}: {depth_info} {self.file_type.human_readable_name} {self.filename_or_path!r}{size_info}>'
+        return f'<{type(self).__name__}: {depth_info} {self.file_type.short_human_readable_name} {self.filename_or_path!r}{size_info}>'
 
     @property
     def filename_or_path(self) -> str:

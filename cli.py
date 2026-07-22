@@ -1,5 +1,4 @@
 # TODO: Show warning in yellow text if building a file tree from a drive root without administrator privileges. Probably also suppressed by `--silent`, but maybe not?
-# TODO: Add root node file type to `--info`
 # TODO: Rigorously test CLI
 
 
@@ -678,9 +677,10 @@ Special segments:
         # noinspection PyUnboundLocalVariable
         generic_message(f'''File tree info:
     Root path: {file_tree_root.path!r}
+    Root file type: {file_tree_root.file_type.human_readable_name}
     Total physical size: {winflame.format_data_size(file_tree_root.total_physical_size)} ({file_tree_root.total_physical_size:,} bytes)
     Total logical size: {winflame.format_data_size(file_tree_root.total_logical_size)} ({file_tree_root.total_logical_size:,} bytes)
-    Is drive root: {file_tree_root.is_drive_root}
+    Is drive root: {str(file_tree_root.is_drive_root).lower()}
     Drive capacity: {
         (
             'Unknown (insufficient permissions)'
