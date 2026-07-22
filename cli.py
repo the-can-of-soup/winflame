@@ -1,4 +1,5 @@
 # TODO: Rename `-s` to `-S`, and add `-s` a.k.a. `--silent` option that suppresses all non-error output.
+# TODO: Show warning in yellow text if building a file tree from a drive root without administrator privileges. Probably also suppressed by `--silent`, but maybe not?
 
 
 
