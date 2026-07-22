@@ -1378,12 +1378,15 @@ class FileNode:
             is_node: bool = isinstance(node, FileNode)
             node_depth: int # Relative to the root layer
             node_size_bytes: int
+            label_text: str
             if is_node:
                 node_depth = node.depth - base_depth
                 node_size_bytes = node.total_physical_size if use_physical_size else node.total_logical_size
+                label_text = node.path if node_depth == 0 else node.filename
             else:
                 node_depth = 0
                 node_size_bytes = node[1]
+                label_text = node[0]
             
             # Do not draw if the node is above the maximum depth
             if max_depth is not None and node_depth > max_depth:
@@ -1429,7 +1432,7 @@ class FileNode:
                 # Draw label onto clipping canvas
                 label_canvas_draw.text(
                     xy = (label_x_on_canvas, label_y_on_canvas),
-                    text = node.filename_or_path if is_node else node[0],
+                    text = label_text,
                     fill = foreground_color,
                     font = font,
                     anchor = 'mm',
@@ -1502,4 +1505,4 @@ DESCENDANT_ERROR_COLOR: tuple[int, int, int] = (255, 255, 0) # Only used by the 
 
 UNACCOUNTED_COLOR: tuple[int, int, int, int] = (255, 50, 50, 255)
 FREE_COLOR: tuple[int, int, int, int] = (200, 200, 200, 255)
-EXTRA_COUNTED_COLOR: tuple[int, int, int, int] = (255, 50, 50, 255)
+EXTRA_COUNTED_COLOR: tuple[int, int, int, int] = (255, 255, 0, 255)
