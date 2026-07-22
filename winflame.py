@@ -92,10 +92,10 @@ class LabelVisibility(enum.Enum):
     See also: ``FileNode.create_flame_graph``
     """
 
-    NONE = 0
-    SPECIAL_SEGMENTS = 1
-    FILES = 2
-    ALL = 3
+    NONE = 'none'
+    FILES = 'files'
+    SPECIAL_SEGMENTS = 'special'
+    ALL = 'all'
 
     def is_visible(self, is_node: bool) -> bool:
         """
@@ -108,8 +108,8 @@ class LabelVisibility(enum.Enum):
         """
         match self:
             case LabelVisibility.NONE: return False
-            case LabelVisibility.SPECIAL_SEGMENTS: return not is_node
             case LabelVisibility.FILES: return is_node
+            case LabelVisibility.SPECIAL_SEGMENTS: return not is_node
             case LabelVisibility.ALL: return True
 
 
