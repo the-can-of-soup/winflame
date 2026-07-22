@@ -133,7 +133,7 @@ def save_file_tree(root: winflame.FileNode, file_path: str, tree_file_hashes_pat
         # Add digest to trusted digest list
         f.write(digest)
 
-def exit_with_error(parser: argparse.ArgumentParser, message: str, status: int = 1) -> NoReturn:
+def exit_with_error(parser: argparse.ArgumentParser, message: str, status: int = 1, clear_line: bool = True) -> NoReturn:
     """
     Exits the program with an error message.
 
@@ -143,13 +143,35 @@ def exit_with_error(parser: argparse.ArgumentParser, message: str, status: int =
     :type message: str
     :param status: The exit status code to exit with.
     :type status: int
+    :param clear_line: Whether to clear all characters after the cursor on the current line before printing.
+    :type clear_line: bool
     """
     r: int; g: int; b: int
     r, g, b = winflame.ERROR_COLOR
-    sys.stdout.write(f'\033[38;2;{r};{g};{b}m{message}\033[0m\n')
+    output: str = f'\033[38;2;{r};{g};{b}m{message}\033[0m\n'
+    if clear_line: output = '\033[0K' + output
+
+    sys.stdout.write(output)
     sys.stdout.flush()
 
     parser.exit(status)
+
+def success_message(message: str, clear_line: bool = True) -> None:
+    """
+    Prints a success message.
+
+    :param message: The message to print.
+    :type message: str
+    :param clear_line: Whether to clear all characters after the cursor on the current line before printing.
+    :type clear_line: bool
+    """
+    r: int; g: int; b: int
+    r, g, b = winflame.COMPLETED_COLOR
+    output: str = f'\033[38;2;{r};{g};{b}m{message}\033[0m\n'
+    if clear_line: output = '\033[0K' + output
+
+    sys.stdout.write(output)
+    sys.stdout.flush()
 
 def int_in_range(min_value: int | None = None, max_value: int | None = None) -> Callable[[Any], int]:
     """
@@ -453,9 +475,9 @@ Special segments:
     if args.clear_cache:
         if os.path.exists(cache_dir):
             shutil.rmtree(cache_dir)
-            print('Cache cleared.')
+            success_message('Cache cleared.')
         else:
-            print('The cache is already empty.')
+            success_message('The cache is already empty.')
         parser.exit()
 
 
@@ -511,7 +533,7 @@ Special segments:
             is_ads = root_path.endswith(':$DATA'),
             should_report_progress = not args.no_progress_report,
         )
-        print('Built file tree.')
+        success_message('Built file tree.')
 
     elif input_mode_tree_file:
         # Load a file tree from a file
@@ -528,7 +550,7 @@ Special segments:
 
         # Use tree if it was verified as safe
         file_tree_root = load_result
-        print('Loaded file tree.')
+        success_message('Loaded file tree.')
 
     elif input_mode_reuse_tree:
         # Load cached file tree
@@ -545,7 +567,7 @@ Special segments:
 
         # Use tree if it was verified as safe
         file_tree_root = load_result
-        print('Loaded cached file tree.')
+        success_message('Loaded cached file tree.')
 
 
     # Output
@@ -561,7 +583,7 @@ Special segments:
         print('Caching file tree...', end='\r')
         # noinspection PyUnboundLocalVariable
         save_file_tree(file_tree_root, cached_file_tree_path, tree_file_hashes_path)
-        print('Cached file tree.')
+        success_message('Cached file tree.')
 
     if output_mode_tree_file:
         # Export file tree to a file
@@ -586,7 +608,7 @@ Special segments:
         # Export
         print('Exporting file tree...', end='\r')
         save_file_tree(file_tree_root, file_tree_path, tree_file_hashes_path)
-        print(f'Wrote file tree to {file_tree_path!r}.')
+        success_message(f'Wrote file tree to {file_tree_path!r}.')
 
     if output_mode_flame:
         # Create a flame graph
@@ -732,7 +754,7 @@ Special segments:
         # Write to file
         print('Saving flame graph...', end='\r')
         flame_graph.save(flame_graph_path)
-        print(f'Wrote flame graph to {flame_graph_path!r}.')
+        success_message(f'Wrote flame graph to {flame_graph_path!r}.')
 
 
     # Print usage if no I/O options were given and we did not already exit from completing a miscellaneous action

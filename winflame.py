@@ -1535,9 +1535,9 @@ FILE_TYPE_COLORS: dict[FileType, tuple[int, int, int]] = {
 
 # Progress report colors
 NOT_STARTED_COLOR: tuple[int, int, int] = (100, 100, 100)
-COMPLETED_COLOR: tuple[int, int, int] = (50, 255, 50) # Only used by the progress report checkbox; not the node itself
+COMPLETED_COLOR: tuple[int, int, int] = (50, 255, 50) # Only used by the checkbox; not the node itself, also used for CLI success messages
 ERROR_COLOR: tuple[int, int, int] = (255, 50, 50) # Also used for CLI error messages
-DESCENDANT_ERROR_COLOR: tuple[int, int, int] = (255, 255, 0) # Only used by the progress report checkbox; not the node itself
+DESCENDANT_ERROR_COLOR: tuple[int, int, int] = (255, 255, 0) # Only used by the checkbox; not the node itself
 
 # Special segment colors
 UNACCOUNTED_COLOR: tuple[int, int, int, int] = (255, 50, 50, 255)
