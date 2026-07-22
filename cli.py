@@ -289,7 +289,11 @@ class NewlinePreservingHelpFormatter(argparse.HelpFormatter):
 
 # MAIN
 
-if __name__ == '__main__':
+def cli() -> None:
+    """
+    Runs the WinFlame CLI.
+    """
+
     # Compute paths
 
     program_dir: str = os.path.dirname(os.path.abspath(__file__))
@@ -811,3 +815,7 @@ Special segments:
     if not (input_option_is_present or output_option_is_present):
         parser.print_usage()
         print(f'\nType {parser.prog} --help for detailed help.')
+
+
+if __name__ == '__main__':
+    cli()
