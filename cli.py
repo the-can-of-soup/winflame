@@ -543,6 +543,7 @@ Special segments:
                 exit_with_error(parser, f'Failed to build file tree from {normalized_target_path!r}; invalid alternate data stream syntax.')
 
         # Build file tree
+        print('Building file tree...', end='\r')
         file_tree_root = winflame.FileNode(
             root_path,
             is_ads = root_path.endswith(':$DATA'),
