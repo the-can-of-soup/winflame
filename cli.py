@@ -511,12 +511,15 @@ Special segments:
     if input_mode_target:
         # Build a file tree from a target (root) path
 
+        # Normalize path
+        normalized_target_path: str = os.path.normpath(args.target)
+
         # Ensure path exists
-        if not os.path.exists(args.target):
-            exit_with_error(parser, f'Failed to build file tree from {args.target}; target path does not exist.')
+        if not os.path.exists(normalized_target_path):
+            exit_with_error(parser, f'Failed to build file tree from {normalized_target_path!r}; target path does not exist.')
 
         # Absolutize path and ensure ":$DATA" suffix if it is an alternate data stream
-        root_path: str = os.path.abspath(args.target)
+        root_path: str = os.path.abspath(normalized_target_path)
         filename: str = os.path.basename(root_path)
         filename_colon_count: int = filename.count(':')
         if filename_colon_count == 1:
@@ -525,7 +528,7 @@ Special segments:
             root_path = os.path.join(os.path.dirname(root_path), filename)
         elif filename_colon_count > 1:
             if filename_colon_count != 2 or not filename.endswith(':$DATA'):
-                exit_with_error(parser, f'Failed to build file tree from {args.target}; invalid alternate data stream syntax.')
+                exit_with_error(parser, f'Failed to build file tree from {normalized_target_path!r}; invalid alternate data stream syntax.')
 
         # Build file tree
         file_tree_root = winflame.FileNode(
@@ -533,24 +536,27 @@ Special segments:
             is_ads = root_path.endswith(':$DATA'),
             should_report_progress = not args.no_progress_report,
         )
-        success_message('Built file tree.')
+        success_message(f'Built file tree from {normalized_target_path!r}.')
 
     elif input_mode_tree_file:
         # Load a file tree from a file
 
+        # Normalize path
+        tree_file_path: str = os.path.normpath(args.tree_in)
+
         # Ensure path exists and is a file
-        if not os.path.isfile(args.tree_in):
-            exit_with_error(parser, f'Failed to load file tree {args.tree_in!r}; file does not exist.')
+        if not os.path.isfile(tree_file_path):
+            exit_with_error(parser, f'Failed to load file tree {tree_file_path!r}; file does not exist.')
 
         # Verify and load file tree
         print('Loading file tree...', end='\r')
-        load_result: winflame.FileNode | None = load_file_tree(args.tree_in, tree_file_hashes_path)
+        load_result: winflame.FileNode | None = load_file_tree(tree_file_path, tree_file_hashes_path)
         if load_result is None:
-            exit_with_error(parser, f'Failed to load file tree {args.tree_in!r}; file did not match any known hashes. Was it created by this program installation?')
+            exit_with_error(parser, f'Failed to load file tree {tree_file_path!r}; file did not match any known hashes. Was it created by this program installation?')
 
         # Use tree if it was verified as safe
         file_tree_root = load_result
-        success_message('Loaded file tree.')
+        success_message(f'Loaded file tree from {tree_file_path!r}.')
 
     elif input_mode_reuse_tree:
         # Load cached file tree
@@ -608,7 +614,7 @@ Special segments:
         # Export
         print('Exporting file tree...', end='\r')
         save_file_tree(file_tree_root, file_tree_path, tree_file_hashes_path)
-        success_message(f'Wrote file tree to {file_tree_path!r}.')
+        success_message(f'Wrote file tree to {os.path.relpath(file_tree_path)!r}.')
 
     if output_mode_flame:
         # Create a flame graph
@@ -754,7 +760,7 @@ Special segments:
         # Write to file
         print('Saving flame graph...  ', end='\r')
         flame_graph.save(flame_graph_path)
-        success_message(f'Wrote flame graph to {flame_graph_path!r}.')
+        success_message(f'Wrote flame graph to {os.path.relpath(flame_graph_path)!r}.')
 
 
     # Print usage if no I/O options were given and we did not already exit from completing a miscellaneous action
