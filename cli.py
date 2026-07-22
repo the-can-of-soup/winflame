@@ -290,9 +290,9 @@ class NewlinePreservingHelpFormatter(argparse.HelpFormatter):
 
 # MAIN
 
-def cli() -> None:
+def cli() -> None: # TODO: Maybe add command-line args as a parameter?
     """
-    Runs the WinFlame CLI.
+    Runs the WinFlame CLI (Command-Line Interface).
     """
 
     # Compute paths
