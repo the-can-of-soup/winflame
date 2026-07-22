@@ -1,5 +1,7 @@
 # TODO: Rename `-s` to `-S`, and add `-s` a.k.a. `--silent` option that suppresses all non-error output.
 # TODO: Show warning in yellow text if building a file tree from a drive root without administrator privileges. Probably also suppressed by `--silent`, but maybe not?
+# TODO: Add root node file type to `--info`
+# TODO: Rigorously test CLI
 
 
 
@@ -365,9 +367,10 @@ def cli() -> None: # TODO: Maybe add command-line args as a parameter?
 
     flame_graph_options.add_argument('-R', '--flame-root',
         help='Build the flame graph from a different node of the file tree than the root. If provided, this should be a'
-            + ' path relative to the file tree\'s root that does not traverse any symlinks or junctions. In the special'
-            + ' case where the file tree root is a file and you wish to make the flame root one of its alternate data'
-            + ' streams (for some reason), just the stream suffix should be used (e.g. \':ads\' or \':ads:$DATA\').')
+            + ' path relative to the file tree\'s root that does not traverse any symlinks or junctions. If you don\'t'
+            + ' know the file tree\'s root, you can check with -I. In the special case where the file tree root is a'
+            + ' file and you want to make the flame root one of its alternate data streams (for some reason), just the'
+            + ' stream suffix should be used (e.g. \':ads\' or \':ads:$DATA\').')
     flame_graph_options.add_argument('-m', '--max-flame-depth', type=int_in_range(0, None),
         help='Limit the number of layers above the flame root to draw.')
 
