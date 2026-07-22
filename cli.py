@@ -1,4 +1,3 @@
-# TODO: Show warning in yellow text if building a file tree from a drive root without administrator privileges. Probably also suppressed by `--silent`, but maybe not?
 # TODO: Rigorously test CLI
 
 
@@ -10,6 +9,7 @@ from __future__ import annotations
 from PIL import Image, ImageFont, PcfFontFile, BdfFontFile
 from collections.abc import Callable
 from typing import Any, NoReturn
+import win32com.shell.shell
 import pickletools
 import argparse
 import hashlib
@@ -37,6 +37,11 @@ CACHED_FILE_TREE_FILENAME: str = 'file_tree.wftree'
 DEFAULT_FLAME_GRAPH_FILENAME_FORMAT: str = 'flame_graph_%H-%M-%S_%m-%d-%Y.png'
 DEFAULT_FILE_TREE_FILENAME_FORMAT: str = 'file_tree_%H-%M-%S_%m-%d-%Y.wftree'
 
+# CLI colors
+SUCCESS_COLOR: tuple[int, int, int] = (50, 255, 50)
+WARNING_COLOR: tuple[int, int, int] = (255, 255, 0)
+ERROR_COLOR: tuple[int, int, int] = (255, 50, 50)
+
 COLOR_KEY: list[tuple[str, tuple[int, int, int]] | None] = [ # Each list element is a line; `None` indicates a blank line
     ('Regular file*', winflame.FileType.REGULAR_FILE.color_rgb),
     ('Directory*', winflame.FileType.DIRECTORY.color_rgb),
@@ -58,7 +63,8 @@ COLOR_KEY: list[tuple[str, tuple[int, int, int]] | None] = [ # Each list element
 
 # GLOBALS
 
-silent_mode: bool = False # Suppresses all non-error output
+silent_mode: bool = False # Suppresses all output except errors and warnings
+suppress_warnings: bool = False
 
 
 
@@ -144,25 +150,50 @@ def save_file_tree(root: winflame.FileNode, file_path: str, tree_file_hashes_pat
         # Add digest to trusted digest list
         f.write(digest)
 
-def generic_message(message: str, clear_line: bool = True) -> None:
+def generic_message(
+        message: str,
+        end: str = '\n',
+        ask_yes_no: bool = False,
+        clear_line: bool = True,
+        bypass_silent_mode: bool = False,
+    ) -> bool | None:
     """
     Prints a message.
 
     :param message: The message to print.
     :type message: str
+    :param end: A string to append to the message before printing.
+    :type end: str
+    :param ask_yes_no: If ``True``, the user will be prompted for a yes/no answer (defaulting to "no" if invalid input,
+        or "yes" if suppressed), and ``end`` will have no effect. Terminal formatting will automatically be cleared at
+        the end of the line if this is ``True``.
+    :type ask_yes_no: bool
     :param clear_line: Whether to clear all characters after the cursor on the current line before printing.
     :type clear_line: bool
+    :param bypass_silent_mode: If ``True``, prints the message even if silent mode is enabled.
+    :type bypass_silent_mode: bool
+    :return: ``True`` if the user chose "yes" for the yes/no prompt, ``False`` if they chose "no", or ``None`` if
+        ``ask_yes_no`` is false.
+    :rtype: bool | None
     """
     global silent_mode
 
-    if silent_mode:
-        return
+    if silent_mode and not bypass_silent_mode:
+        return True if ask_yes_no else None
 
-    output: str = f'{message}\n'
-    if clear_line: output = '\033[0K' + output
+    output: str = message
+    if not ask_yes_no:
+        output += end
+    if clear_line:
+        output = '\033[0K' + output
 
-    sys.stdout.write(output)
-    sys.stdout.flush()
+    if ask_yes_no:
+        response: str = input(output + ' [y/n] \033[0m').strip().lower()
+        return response in ('y', 'yes')
+    else:
+        sys.stdout.write(output)
+        sys.stdout.flush()
+        return None
 
 def loading_message(message: str, clear_line: bool = True) -> None:
     """
@@ -173,16 +204,7 @@ def loading_message(message: str, clear_line: bool = True) -> None:
     :param clear_line: Whether to clear all characters after the cursor on the current line before printing.
     :type clear_line: bool
     """
-    global silent_mode
-
-    if silent_mode:
-        return
-
-    output: str = f'{message}\r'
-    if clear_line: output = '\033[0K' + output
-
-    sys.stdout.write(output)
-    sys.stdout.flush()
+    generic_message(message, end='\r', clear_line=clear_line)
 
 def success_message(message: str, clear_line: bool = True) -> None:
     """
@@ -193,18 +215,41 @@ def success_message(message: str, clear_line: bool = True) -> None:
     :param clear_line: Whether to clear all characters after the cursor on the current line before printing.
     :type clear_line: bool
     """
-    global silent_mode
+    r: int; g: int; b: int
+    r, g, b = SUCCESS_COLOR
+    generic_message(
+        f'\033[38;2;{r};{g};{b}m{message}\033[0m',
+        clear_line=clear_line,
+    )
 
-    if silent_mode:
-        return
+def warning_message(message: str, ask_yes_no: bool = False, clear_line: bool = True) -> bool | None:
+    """
+    Prints a warning message.
+
+    :param message: The message to print.
+    :type message: str
+    :param ask_yes_no: If ``True``, the user will be prompted for a yes/no answer (defaulting to "no" if invalid input,
+        or "yes" if suppressed).
+    :type ask_yes_no: bool
+    :param clear_line: Whether to clear all characters after the cursor on the current line before printing.
+    :type clear_line: bool
+    :return: ``True`` if the user chose "yes" for the yes/no prompt, ``False`` if they chose "no", or ``None`` if
+        ``ask_yes_no`` is false.
+    :rtype: bool | None
+    """
+    global suppress_warnings
+
+    if suppress_warnings:
+        return True if ask_yes_no else None
 
     r: int; g: int; b: int
-    r, g, b = winflame.COMPLETED_COLOR
-    output: str = f'\033[38;2;{r};{g};{b}m{message}\033[0m\n'
-    if clear_line: output = '\033[0K' + output
-
-    sys.stdout.write(output)
-    sys.stdout.flush()
+    r, g, b = WARNING_COLOR
+    return generic_message(
+        f'\033[38;2;{r};{g};{b}mWarning: {message}' + ('' if ask_yes_no else '\033[0m'),
+        ask_yes_no=ask_yes_no,
+        clear_line=clear_line,
+        bypass_silent_mode=True,
+    )
 
 def exit_with_error(parser: argparse.ArgumentParser, message: str, status: int = 1, clear_line: bool = True) -> NoReturn:
     """
@@ -220,12 +265,12 @@ def exit_with_error(parser: argparse.ArgumentParser, message: str, status: int =
     :type clear_line: bool
     """
     r: int; g: int; b: int
-    r, g, b = winflame.ERROR_COLOR
-    output: str = f'\033[38;2;{r};{g};{b}m{message}\033[0m\n'
-    if clear_line: output = '\033[0K' + output
-
-    sys.stdout.write(output)
-    sys.stdout.flush()
+    r, g, b = ERROR_COLOR
+    generic_message(
+        f'\033[38;2;{r};{g};{b}mError: {message}\033[0m',
+        clear_line=clear_line,
+        bypass_silent_mode=True,
+    )
 
     parser.exit(status)
 
@@ -350,6 +395,7 @@ def cli(args: list[str] | None = None) -> None:
     :type args: list[str] | None
     """
     global silent_mode
+    global suppress_warnings
 
     # Compute paths
 
@@ -377,8 +423,8 @@ def cli(args: list[str] | None = None) -> None:
         description='Use one of these options to choose how to obtain a file tree.')
     input_options = input_options_parent.add_mutually_exclusive_group()
 
-    input_options.add_argument('-t', '--target', '-b', '--build',
-        help='A "root" file or directory to build the file tree from.')
+    input_options.add_argument('-b', '--build-from', '-t', '--target',
+        help='A file or directory to build the file tree from, called the "root" of the file tree.')
     input_options.add_argument('-i', '--tree-in', # -i for "in" or "import"
         help='A tree file to load that was created with -e. These files cannot be shared, as allowing this would allow'
             + ' arbitrary code execution via a deserialization attack. To prevent this, files loaded with this option'
@@ -390,8 +436,8 @@ def cli(args: list[str] | None = None) -> None:
     input_config_options = parser.add_argument_group('Input configuration options',
         description='Extra configuration for the input options.')
 
-    input_config_options.add_argument('-n', '--no-progress-report', action='store_true',
-        help='Hide the progress report display when using -t.')
+    input_config_options.add_argument('-N', '--no-progress-report', action='store_true',
+        help='Hide the progress report display when using -b.')
 
 
     output_options = parser.add_argument_group('Output options',
@@ -495,7 +541,9 @@ Special segments:
     miscellaneous_options.add_argument('-d', '--clear-cache', action='store_true', # -d for "delete"
         help='Delete the file tree cached with -c (if there is one) and exit.')
     miscellaneous_options.add_argument('-s', '--silent', action='store_true',
-        help='Suppress all non-error output.')
+        help='Suppress all output except errors and warnings.')
+    miscellaneous_options.add_argument('-n', '--no-warnings', action='store_true',
+        help='Suppress all warnings.')
 
 
     args: argparse.Namespace = parser.parse_args(args)
@@ -503,8 +551,9 @@ Special segments:
 
     # Miscellaneous options
 
-    # Silent mode
+    # Output suppression
     silent_mode = args.silent
+    suppress_warnings = args.no_warnings
 
     # Help text
     if args.help:
@@ -562,7 +611,7 @@ Special segments:
     # Determine I/O modes
 
     # Input
-    input_mode_target: bool = args.target is not None
+    input_mode_build_tree: bool = args.build_from is not None
     input_mode_tree_file: bool = args.tree_in is not None
     input_mode_reuse_tree: bool = args.reuse_tree
 
@@ -574,7 +623,7 @@ Special segments:
 
     # Check if at least one option is present for each category
     input_option_is_present: bool = (
-            input_mode_target
+            input_mode_build_tree
             or input_mode_tree_file
             or input_mode_reuse_tree
     )
@@ -600,11 +649,11 @@ Special segments:
 
     file_tree_root: winflame.FileNode
 
-    if input_mode_target:
+    if input_mode_build_tree:
         # Build a file tree from a target (root) path
 
         # Normalize path
-        normalized_target_path: str = os.path.normpath(args.target)
+        normalized_target_path: str = os.path.normpath(args.build_from)
 
         # Ensure path exists
         if not os.path.exists(normalized_target_path):
@@ -621,6 +670,18 @@ Special segments:
         elif filename_colon_count > 1:
             if filename_colon_count != 2 or not filename.endswith(':$DATA'):
                 exit_with_error(parser, f'Failed to build file tree from {normalized_target_path!r}; invalid alternate data stream syntax.')
+
+        # Show warning and ask for confirmation if building from a drive root without elevated privileges
+        canonical_root_path: str = os.path.realpath(root_path, strict=True)
+        drive_letter: str; path_on_drive: str
+        drive_letter, path_on_drive = os.path.splitdrive(canonical_root_path)
+        is_drive_root: bool = drive_letter != '' and path_on_drive == os.path.sep
+        if is_drive_root and not win32com.shell.shell.IsUserAnAdmin():
+            should_continue: bool = warning_message('You are trying to build a file tree from a drive root without'
+                + ' administrator privileges. Not all information may be available, for example drive capacity and'
+                + ' system file sizes. Continue anyway?', ask_yes_no=True)
+            if not should_continue:
+                parser.exit()
 
         # Build file tree
         loading_message('Building file tree...')
