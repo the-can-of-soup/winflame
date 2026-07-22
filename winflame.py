@@ -1279,7 +1279,7 @@ class FileNode:
             draw labels.
         :type label_visibility: bool
         :param min_label_width: If a rectangle is less than this many pixels wide, its label will not be drawn. Note
-            that lower values may take longer to render due to increased overall label count.
+            that lower values may take longer to render due to increased overall label count. Must be at least ``1``.
         :type min_label_width: int
         :param font: The font to use for node labels. If ``None``, a default font is used.
         :type font: ImageFont.ImageFont | ImageFont.FreeTypeFont | None
