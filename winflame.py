@@ -85,6 +85,34 @@ def truncate(text: str, width: int) -> str:
     return text
 
 
+class LabelVisibility(enum.Enum):
+    """
+    A visibility setting for labels on a flame graph.
+
+    See also: ``FileNode.create_flame_graph``
+    """
+
+    NONE = 0
+    SPECIAL_SEGMENTS = 1
+    FILES = 2
+    ALL = 3
+
+    def is_visible(self, is_node: bool) -> bool:
+        """
+        Checks if a label should be drawn on a flame graph with this visibility setting.
+
+        :param is_node: ``True`` if the label is for a node rather than a special segment.
+        :type is_node: bool
+        :return: ``True`` if the label should be drawn.
+        :rtype: bool
+        """
+        match self:
+            case LabelVisibility.NONE: return False
+            case LabelVisibility.SPECIAL_SEGMENTS: return not is_node
+            case LabelVisibility.FILES: return is_node
+            case LabelVisibility.ALL: return True
+
+
 class WindowsFileAttributes(enum.Flag):
     """
     A set of a Windows file attributes.
@@ -1217,9 +1245,9 @@ class FileNode:
             layer_height: int = 20,
             background_color: tuple[int, int, int, int] = (255, 255, 255, 255),
             foreground_color: tuple[int, int, int, int] = (0, 0, 0, 255),
-            show_labels: bool = True,
-            font: ImageFont.ImageFont | ImageFont.FreeTypeFont | None = None,
+            label_visibility: LabelVisibility = LabelVisibility.ALL,
             min_label_width: int = 15,
+            font: ImageFont.ImageFont | ImageFont.FreeTypeFont | None = None,
             show_drive_free_space: bool = True,
             show_drive_unaccounted_space: bool = True,
             show_drive_extra_counted_space: bool = True,
@@ -1243,13 +1271,18 @@ class FileNode:
         :type background_color: tuple[int, int, int, int]
         :param foreground_color: The color of the graph's text and outlines in RGBA format.
         :type foreground_color: tuple[int, int, int, int]
-        :param show_labels: If ``True``, labels are drawn on nodes.
-        :type show_labels: bool
-        :param font: The font to use for node labels. If ``None``, a default font is used.
-        :type font: ImageFont.ImageFont | ImageFont.FreeTypeFont | None
-        :param min_label_width: If a node's rectangle is less than this many pixels wide, it will not get a label. Note
+        :param label_visibility: Determines where to draw labels on rectangles. ``LabelVisibility.ALL`` will always draw
+            labels. ``LabelVisibility.SPECIAL_SEGMENTS`` will only draw labels on the rectangles created by
+            ``show_drive_free_space``, ``show_drive_unaccounted_space``, and ``show_drive_extra_counted_space``.
+            ``LabelVisibility.FILES`` will draw labels on all rectangles except those that have labels with
+            ``LabelVisibility.SPECIAL_SEGMENTS``, i.e. all nodes of the file tree. ``LabelVisibility.NONE`` will never
+            draw labels.
+        :type label_visibility: bool
+        :param min_label_width: If a rectangle is less than this many pixels wide, its label will not be drawn. Note
             that lower values may take longer to render due to increased overall label count.
         :type min_label_width: int
+        :param font: The font to use for node labels. If ``None``, a default font is used.
+        :type font: ImageFont.ImageFont | ImageFont.FreeTypeFont | None
         :param show_drive_free_space: Only applies if the node is a drive root and ``use_physical_size`` is true. If
             ``True``, a rectangle will be drawn at the root layer representing the amount of free space on the drive.
             Extra-counted space is not included (if the data to compute that is accessible); see
@@ -1362,9 +1395,9 @@ class FileNode:
             nonlocal max_depth
             nonlocal layer_height
             nonlocal foreground_color
-            nonlocal show_labels
-            nonlocal font
+            nonlocal label_visibility
             nonlocal min_label_width
+            nonlocal font
 
             nonlocal base_depth
             nonlocal layer_count
@@ -1413,8 +1446,8 @@ class FileNode:
                 width=1,
             )
 
-            # Draw label if labels are enabled and the rectangle is big enough
-            if show_labels and rectangle_width >= min_label_width:
+            # Draw label if labels are enabled for this rectangle type and the rectangle is big enough
+            if label_visibility.is_visible(is_node) and rectangle_width >= min_label_width:
 
                 # Create clipping canvas for label
                 #
