@@ -916,10 +916,15 @@ class FileNode:
 
         lines: list[str] = []
         r: int; g: int; b: int
-        header_line: str = ''
+
+        # Add loading text if this is the root node
+        if self.is_root:
+            lines.append('Building tree...')
 
 
         # Format header line
+
+        header_line: str = ''
 
         # Add checkbox
         if self._progress_report_completed:
