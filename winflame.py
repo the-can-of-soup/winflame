@@ -1516,11 +1516,13 @@ class FileNode:
 
 # CONSTANTS
 
+# Progress report general settings
 PROGRESS_REPORT_INTERVAL: float = 0.1 # In seconds
 PROGRESS_REPORT_MAX_FILENAME_WIDTH: int = 60 # In characters
 PROGRESS_REPORT_OUTER_MAX_VISIBLE_CHILDREN: int = 5
 PROGRESS_REPORT_WORKING_DEPTH_MAX_VISIBLE_CHILDREN: int = 10
 
+# File type colors (used in flame graphs and progress reports)
 FILE_TYPE_COLORS: dict[FileType, tuple[int, int, int]] = {
     FileType.DIRECTORY: (255, 150, 25),
     FileType.REGULAR_FILE: (50, 255, 50),
@@ -1531,11 +1533,13 @@ FILE_TYPE_COLORS: dict[FileType, tuple[int, int, int]] = {
     FileType.UNKNOWN: (200, 200, 200),
 }
 
+# Progress report colors
 NOT_STARTED_COLOR: tuple[int, int, int] = (100, 100, 100)
 COMPLETED_COLOR: tuple[int, int, int] = (50, 255, 50) # Only used by the progress report checkbox; not the node itself
-ERROR_COLOR: tuple[int, int, int] = (255, 50, 50)
+ERROR_COLOR: tuple[int, int, int] = (255, 50, 50) # Also used for CLI error messages
 DESCENDANT_ERROR_COLOR: tuple[int, int, int] = (255, 255, 0) # Only used by the progress report checkbox; not the node itself
 
+# Special segment colors
 UNACCOUNTED_COLOR: tuple[int, int, int, int] = (255, 50, 50, 255)
 FREE_COLOR: tuple[int, int, int, int] = (200, 200, 200, 255)
 EXTRA_COUNTED_COLOR: tuple[int, int, int, int] = (255, 255, 0, 255)
