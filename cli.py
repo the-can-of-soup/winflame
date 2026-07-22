@@ -1,4 +1,3 @@
-# TODO: Rename `-s` to `-S`, and add `-s` a.k.a. `--silent` option that suppresses all non-error output.
 # TODO: Show warning in yellow text if building a file tree from a drive root without administrator privileges. Probably also suppressed by `--silent`, but maybe not?
 # TODO: Add root node file type to `--info`
 # TODO: Rigorously test CLI
@@ -55,6 +54,12 @@ COLOR_KEY: list[tuple[str, tuple[int, int, int]] | None] = [ # Each list element
     ('Drive free space*', winflame.FREE_COLOR[:3]),
     ('Drive extra-counted space*', winflame.EXTRA_COUNTED_COLOR[:3]),
 ]
+
+
+
+# GLOBALS
+
+silent_mode: bool = False # Suppresses all non-error output
 
 
 
@@ -140,6 +145,68 @@ def save_file_tree(root: winflame.FileNode, file_path: str, tree_file_hashes_pat
         # Add digest to trusted digest list
         f.write(digest)
 
+def generic_message(message: str, clear_line: bool = True) -> None:
+    """
+    Prints a message.
+
+    :param message: The message to print.
+    :type message: str
+    :param clear_line: Whether to clear all characters after the cursor on the current line before printing.
+    :type clear_line: bool
+    """
+    global silent_mode
+
+    if silent_mode:
+        return
+
+    output: str = f'{message}\n'
+    if clear_line: output = '\033[0K' + output
+
+    sys.stdout.write(output)
+    sys.stdout.flush()
+
+def loading_message(message: str, clear_line: bool = True) -> None:
+    """
+    Prints a loading message and moves the cursor back to the start of the line.
+
+    :param message: The message to print.
+    :type message: str
+    :param clear_line: Whether to clear all characters after the cursor on the current line before printing.
+    :type clear_line: bool
+    """
+    global silent_mode
+
+    if silent_mode:
+        return
+
+    output: str = f'{message}\r'
+    if clear_line: output = '\033[0K' + output
+
+    sys.stdout.write(output)
+    sys.stdout.flush()
+
+def success_message(message: str, clear_line: bool = True) -> None:
+    """
+    Prints a success message.
+
+    :param message: The message to print.
+    :type message: str
+    :param clear_line: Whether to clear all characters after the cursor on the current line before printing.
+    :type clear_line: bool
+    """
+    global silent_mode
+
+    if silent_mode:
+        return
+
+    r: int; g: int; b: int
+    r, g, b = winflame.COMPLETED_COLOR
+    output: str = f'\033[38;2;{r};{g};{b}m{message}\033[0m\n'
+    if clear_line: output = '\033[0K' + output
+
+    sys.stdout.write(output)
+    sys.stdout.flush()
+
 def exit_with_error(parser: argparse.ArgumentParser, message: str, status: int = 1, clear_line: bool = True) -> NoReturn:
     """
     Exits the program with an error message.
@@ -162,23 +229,6 @@ def exit_with_error(parser: argparse.ArgumentParser, message: str, status: int =
     sys.stdout.flush()
 
     parser.exit(status)
-
-def success_message(message: str, clear_line: bool = True) -> None:
-    """
-    Prints a success message.
-
-    :param message: The message to print.
-    :type message: str
-    :param clear_line: Whether to clear all characters after the cursor on the current line before printing.
-    :type clear_line: bool
-    """
-    r: int; g: int; b: int
-    r, g, b = winflame.COMPLETED_COLOR
-    output: str = f'\033[38;2;{r};{g};{b}m{message}\033[0m\n'
-    if clear_line: output = '\033[0K' + output
-
-    sys.stdout.write(output)
-    sys.stdout.flush()
 
 def int_in_range(min_value: int | None = None, max_value: int | None = None) -> Callable[[Any], int]:
     """
@@ -292,10 +342,15 @@ class NewlinePreservingHelpFormatter(argparse.HelpFormatter):
 
 # MAIN
 
-def cli() -> None: # TODO: Maybe add command-line args as a parameter?
+def cli(args: list[str] | None = None) -> None:
     """
     Runs the WinFlame CLI (Command-Line Interface).
+
+    :param args: A list of arguments passed to the CLI. If ``None``, the arguments passed to the current program are
+        used.
+    :type args: list[str] | None
     """
+    global silent_mode
 
     # Compute paths
 
@@ -341,7 +396,7 @@ def cli() -> None: # TODO: Maybe add command-line args as a parameter?
 
 
     output_options = parser.add_argument_group('Output options',
-        description='Use these options to choose what to do with the file tree.')
+        description='Use these options to choose what to do with the file tree. You may use multiple at once.')
 
     flame_output_options = output_options.add_mutually_exclusive_group()
     flame_output_options.add_argument('-f', '-o', '--flame-out', # -f for "flame", -o for "out"
@@ -394,7 +449,7 @@ def cli() -> None: # TODO: Maybe add command-line args as a parameter?
 Allowed values:
     'none': All labels are hidden.
     'files': Labels on file tree nodes are shown.
-    'special': Labels on special segments are shown. See help on -s for more info.
+    'special': Labels on special segments are shown. See help on -S for more info.
     'all': All labels are shown.
 ''')
     flame_graph_options.add_argument('-W', '--min-label-width', type=int_in_range(1, None), default=15,
@@ -408,7 +463,7 @@ Allowed values:
         help='Font size to use for labels in pixels. This has no effect if a PCF, BDF, or PIL font file is used. If'
             + ' omitted, 60%% of the value of -H is used, with a cap of 10.')
 
-    flame_graph_options.add_argument('-s', '--special', choices=['none', 'unaccounted', 'unaccounted-free', 'all'], default='all',
+    flame_graph_options.add_argument('-S', '--special', choices=['none', 'unaccounted', 'unaccounted-free', 'all'], default='all',
         help='''Visibility of special segments. (Default: 'all')
 
 Allowed values:
@@ -440,20 +495,30 @@ Special segments:
         help='Print the flame graph / progress report color key and exit.')
     miscellaneous_options.add_argument('-d', '--clear-cache', action='store_true', # -d for "delete"
         help='Delete the file tree cached with -c (if there is one) and exit.')
+    miscellaneous_options.add_argument('-s', '--silent', action='store_true',
+        help='Suppress all non-error output.')
 
 
-    args: argparse.Namespace = parser.parse_args()
+    args: argparse.Namespace = parser.parse_args(args)
 
 
     # Miscellaneous options
 
+    # Silent mode
+    silent_mode = args.silent
+
     # Help text
     if args.help:
+        if args.silent:
+            exit_with_error(parser, 'Cannot show help with --silent.')
         parser.print_help()
         parser.exit()
 
     # Color key
     if args.colors:
+        if args.silent:
+            exit_with_error(parser, 'Cannot show color key with --silent.')
+
         output: str = ''
 
         for line in COLOR_KEY:
@@ -527,6 +592,10 @@ Special segments:
     elif input_option_is_present and not output_option_is_present:
         exit_with_error(parser, 'Input provided but no output(s) specified.')
 
+    # Error if both --info and -silent are passed
+    if output_mode_tree_info and args.silent:
+        exit_with_error(parser, 'Cannot show file tree info with --silent.')
+
 
     # Obtain file tree
 
@@ -555,11 +624,11 @@ Special segments:
                 exit_with_error(parser, f'Failed to build file tree from {normalized_target_path!r}; invalid alternate data stream syntax.')
 
         # Build file tree
-        print('Building file tree...', end='\r')
+        loading_message('Building file tree...')
         file_tree_root = winflame.FileNode(
             root_path,
             is_ads = root_path.endswith(':$DATA'),
-            should_report_progress = not args.no_progress_report,
+            should_report_progress = not (args.no_progress_report or args.silent),
         )
         success_message(f'Built file tree from {root_path!r}.')
 
@@ -574,7 +643,7 @@ Special segments:
             exit_with_error(parser, f'Failed to load file tree {tree_file_path!r}; file does not exist.')
 
         # Verify and load file tree
-        print('Loading file tree...', end='\r')
+        loading_message('Loading file tree...')
         load_result: winflame.FileNode | None = load_file_tree(tree_file_path, tree_file_hashes_path)
         if load_result is None:
             exit_with_error(parser, f'Failed to load file tree {tree_file_path!r}; file did not match any known hashes. Was it created by this program installation?')
@@ -591,7 +660,7 @@ Special segments:
             exit_with_error(parser, 'There is no cached file tree.')
 
         # Verify and load cached file tree
-        print('Loading cached file tree...', end='\r')
+        loading_message('Loading cached file tree...')
         load_result: winflame.FileNode | None = load_file_tree(cached_file_tree_path, tree_file_hashes_path)
         if load_result is None:
             exit_with_error(parser, 'The cached file tree did not match any known hashes.')
@@ -607,7 +676,7 @@ Special segments:
         # Print basic info about the file tree
 
         # noinspection PyUnboundLocalVariable
-        print(f'''File tree info:
+        generic_message(f'''File tree info:
     Root path: {file_tree_root.path!r}
     Total physical size: {winflame.format_data_size(file_tree_root.total_physical_size)} ({file_tree_root.total_physical_size:,} bytes)
     Total logical size: {winflame.format_data_size(file_tree_root.total_logical_size)} ({file_tree_root.total_logical_size:,} bytes)
@@ -636,7 +705,7 @@ Special segments:
             os.mkdir(cache_dir)
 
         # Save to cache
-        print('Caching file tree...', end='\r')
+        loading_message('Caching file tree...')
         save_file_tree(file_tree_root, cached_file_tree_path, tree_file_hashes_path)
         cached_file_tree_size: int = os.path.getsize(cached_file_tree_path)
         success_message(f'Cached file tree ({winflame.format_data_size(cached_file_tree_size)}).')
@@ -662,7 +731,7 @@ Special segments:
             exit_with_error(parser, f'Cannot export file tree to reserved path {file_tree_path!r}. Does it contain a reserved character?')
 
         # Export
-        print('Exporting file tree...', end='\r')
+        loading_message('Exporting file tree...')
         save_file_tree(file_tree_root, file_tree_path, tree_file_hashes_path)
         exported_file_tree_size: int = os.path.getsize(file_tree_path)
         success_message(f'Wrote file tree to {os.path.relpath(file_tree_path)!r} ({winflame.format_data_size(exported_file_tree_size)}).')
@@ -765,6 +834,7 @@ Special segments:
             font_size = args.font_size
 
         # Load font for labels
+        loading_message('Loading font...')
         font: ImageFont.ImageFont | ImageFont.FreeTypeFont
         if args.font_file is None:
             # Default font
@@ -791,7 +861,7 @@ Special segments:
                     font = ImageFont.load(args.font_file)
 
         # Create flame graph
-        print('Creating flame graph...', end='\r')
+        loading_message('Creating flame graph...')
         # noinspection PyUnboundLocalVariable
         flame_graph: Image.Image = flame_root.create_flame_graph(
             use_physical_size = not args.logical_size,
@@ -809,16 +879,16 @@ Special segments:
         )
 
         # Write to file
-        print('Saving flame graph...  ', end='\r')
+        loading_message('Saving flame graph...')
         flame_graph.save(flame_graph_path)
         success_message(f'Wrote flame graph to {os.path.relpath(flame_graph_path)!r}.')
 
 
     # Print usage if no I/O options were given and we did not already exit from completing a miscellaneous action
 
-    if not (input_option_is_present or output_option_is_present):
+    if not (input_option_is_present or output_option_is_present or args.silent):
         parser.print_usage()
-        print(f'\nType {parser.prog} --help for detailed help.')
+        generic_message(f'\nType {parser.prog} --help for detailed help.')
 
 
 if __name__ == '__main__':
