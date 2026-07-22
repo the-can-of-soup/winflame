@@ -596,7 +596,7 @@ Special segments:
 
         # Choose output file path
         file_tree_path: str
-        if args.flame_out_default:
+        if args.tree_out_default:
             # Generate default filename from current time
             file_tree_filename: str = time.strftime(DEFAULT_FILE_TREE_FILENAME_FORMAT)
             file_tree_path = os.path.join(output_dir, file_tree_filename)
