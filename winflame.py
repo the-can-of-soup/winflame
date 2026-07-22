@@ -1265,7 +1265,7 @@ class FileNode:
         :type max_depth: int | None
         :param width: The width of the graph in pixels. Must be greater than ``1``.
         :type width: int
-        :param layer_height: The height of each layer in pixels.
+        :param layer_height: The height of each layer in pixels. Must be greater than ``1``.
         :type layer_height: int
         :param background_color: The background color of the graph in RGBA format.
         :type background_color: tuple[int, int, int, int]
