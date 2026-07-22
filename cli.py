@@ -1,3 +1,7 @@
+# TODO: Rename `-s` to `-S`, and add `-s` a.k.a. `--silent` option that suppresses all non-error output.
+
+
+
 # IMPORTS
 
 from __future__ import annotations
