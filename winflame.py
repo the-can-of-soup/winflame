@@ -260,6 +260,7 @@ class FileNode:
             self._hard_link_targets = {}
 
             # Root only
+            self._build_timestamp: float = time.time()
             self._last_progress_report_time: float | None = None
             self._should_report_progress: bool = should_report_progress
         else:
@@ -910,6 +911,15 @@ class FileNode:
         :rtype: tuple[int, int, int]
         """
         return ERROR_COLOR if self.is_error else self.file_type.color_rgb
+
+    @property
+    def build_timestamp(self) -> float:
+        """
+        The Unix timestamp of when the file tree was built.
+
+        :rtype: float
+        """
+        return self.root._build_timestamp
 
     def _format_progress(self, working_node: FileNode) -> list[str]:
         # All lines are assumed to begin with default formatting.

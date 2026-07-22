@@ -347,6 +347,8 @@ if __name__ == '__main__':
 
     output_options.add_argument('-c', '--cache-tree', action='store_true',
         help='Cache the file tree to be used again later with -r; overwrites the existing cached tree if there is one.')
+    output_options.add_argument('-I', '--info', action='store_true',
+        help='Print basic info about the file tree.')
 
 
     flame_graph_options = parser.add_argument_group('Flame graph options',
@@ -492,10 +494,20 @@ Special segments:
     output_mode_flame: bool = args.flame_out is not None or args.flame_out_default
     output_mode_tree_file: bool = args.tree_out is not None or args.tree_out_default
     output_mode_cache_tree: bool = args.cache_tree
+    output_mode_tree_info: bool = args.info
 
     # Check if at least one option is present for each category
-    input_option_is_present: bool = input_mode_target or input_mode_tree_file or input_mode_reuse_tree
-    output_option_is_present: bool = output_mode_flame or output_mode_tree_file or output_mode_cache_tree
+    input_option_is_present: bool = (
+            input_mode_target
+            or input_mode_tree_file
+            or input_mode_reuse_tree
+    )
+    output_option_is_present: bool = (
+            output_mode_flame
+            or output_mode_tree_file
+            or output_mode_cache_tree
+            or output_mode_tree_info
+    )
 
     # Ensure that an input option is present if an output option is present and vice versa
     if output_option_is_present and not input_option_is_present:
@@ -536,7 +548,7 @@ Special segments:
             is_ads = root_path.endswith(':$DATA'),
             should_report_progress = not args.no_progress_report,
         )
-        success_message(f'Built file tree from {normalized_target_path!r}.')
+        success_message(f'Built file tree from {root_path!r}.')
 
     elif input_mode_tree_file:
         # Load a file tree from a file
@@ -578,6 +590,31 @@ Special segments:
 
     # Output
 
+    if output_mode_tree_info:
+        # Print basic info about the file tree
+
+        # noinspection PyUnboundLocalVariable
+        print(f'''File tree info:
+    Root path: {file_tree_root.path!r}
+    Total physical size: {winflame.format_data_size(file_tree_root.total_physical_size)} ({file_tree_root.total_physical_size:,} bytes)
+    Total logical size: {winflame.format_data_size(file_tree_root.total_logical_size)} ({file_tree_root.total_logical_size:,} bytes)
+    Is drive root: {file_tree_root.is_drive_root}
+    Drive capacity: {
+        (
+            'Unknown (insufficient permissions)'
+                if file_tree_root.drive_capacity is None
+                    else f'{winflame.format_data_size(file_tree_root.drive_capacity)} ({file_tree_root.drive_capacity:,} bytes)'
+        )
+            if file_tree_root.is_drive_root
+                else 'N/A'
+    }
+    Drive free space: {
+        f'{winflame.format_data_size(file_tree_root.drive_free_space)} ({file_tree_root.drive_free_space:,} bytes)'
+            if file_tree_root.is_drive_root
+                else 'N/A'
+    }
+    Build timestamp: {time.strftime('%m/%d/%Y, %I:%M:%S %p', time.localtime(file_tree_root.build_timestamp))}''')
+
     if output_mode_cache_tree:
         # Save file tree to the cache
 
@@ -587,9 +624,9 @@ Special segments:
 
         # Save to cache
         print('Caching file tree...', end='\r')
-        # noinspection PyUnboundLocalVariable
         save_file_tree(file_tree_root, cached_file_tree_path, tree_file_hashes_path)
-        success_message('Cached file tree.')
+        cached_file_tree_size: int = os.path.getsize(cached_file_tree_path)
+        success_message(f'Cached file tree ({winflame.format_data_size(cached_file_tree_size)}).')
 
     if output_mode_tree_file:
         # Export file tree to a file
@@ -614,7 +651,8 @@ Special segments:
         # Export
         print('Exporting file tree...', end='\r')
         save_file_tree(file_tree_root, file_tree_path, tree_file_hashes_path)
-        success_message(f'Wrote file tree to {os.path.relpath(file_tree_path)!r}.')
+        exported_file_tree_size: int = os.path.getsize(file_tree_path)
+        success_message(f'Wrote file tree to {os.path.relpath(file_tree_path)!r} ({winflame.format_data_size(exported_file_tree_size)}).')
 
     if output_mode_flame:
         # Create a flame graph
