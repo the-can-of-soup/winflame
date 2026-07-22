@@ -505,7 +505,7 @@ Allowed values:
             + ' is used.')
     # In the below help text, the "%" symbol is doubled to escape it because argument help texts are formatted strings.
     flame_graph_options.add_argument('-G', '--font-size', type=int_in_range(1, None), # -G to match -g for --font-file
-        help='Font size to use for labels in pixels. This has no effect if a PCF, BDF, or PIL font file is used. If'
+        help='Font size to use for labels in pixels. This only has an effect if a TTF or OTF font file is used. If'
             + ' omitted, 60%% of the value of -H is used, with a cap of 10.')
 
     flame_graph_options.add_argument('-S', '--special', choices=['none', 'unaccounted', 'unaccounted-free', 'all'], default='all',
