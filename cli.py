@@ -752,7 +752,7 @@ Special segments:
         )
 
         # Write to file
-        print('Saving flame graph...', end='\r')
+        print('Saving flame graph...  ', end='\r')
         flame_graph.save(flame_graph_path)
         success_message(f'Wrote flame graph to {flame_graph_path!r}.')
 
