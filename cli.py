@@ -12,6 +12,7 @@ from typing import Any, NoReturn
 import win32com.shell.shell
 import pickletools
 import argparse
+import tempfile
 import hashlib
 import pickle
 import shutil
@@ -449,6 +450,8 @@ def cli(args: list[str] | None = None) -> None:
             + ' RGBA.')
     flame_output_options.add_argument('-F', '-O', '--flame-out-default', action='store_true',
         help='Create a flame graph and write it to the program\'s output folder under a default name.')
+    flame_output_options.add_argument('-p', '--preview-flame', action='store_true',
+        help='Create a flame graph and open it in the default image program without saving it.')
 
     tree_output_options = output_options.add_mutually_exclusive_group()
     tree_output_options.add_argument('-e', '--tree-out', # -e for "export"
@@ -462,8 +465,16 @@ def cli(args: list[str] | None = None) -> None:
         help='Print basic info about the file tree.')
 
 
+    output_config_options = parser.add_argument_group('Output configuration options',
+        description='Extra configuration for the output options.')
+
+    output_config_options.add_argument('-v', '--open-flame', action='store_true', # -v for "view"
+        help='Open the flame graph in the default image program once it is completed when using -f or -F (implied when'
+            + ' using -p).')
+
+
     flame_graph_options = parser.add_argument_group('Flame graph options',
-        description='Configuration for the flame graph when using -f or -F.')
+        description='Configuration for the flame graph when using -f, -F, or -p.')
 
     flame_graph_options.add_argument('-R', '--flame-root',
         help='Build the flame graph from a different node of the file tree than the root. If provided, this should be a'
@@ -616,7 +627,7 @@ Special segments:
     input_mode_reuse_tree: bool = args.reuse_tree
 
     # Output
-    output_mode_flame: bool = args.flame_out is not None or args.flame_out_default
+    output_mode_flame: bool = args.flame_out is not None or args.flame_out_default or args.preview_flame
     output_mode_tree_file: bool = args.tree_out is not None or args.tree_out_default
     output_mode_cache_tree: bool = args.cache_tree
     output_mode_tree_info: bool = args.info
@@ -801,7 +812,7 @@ Special segments:
         # Create a flame graph
 
         # Choose output file path
-        flame_graph_path: str
+        flame_graph_path: str | None # `None` indicates preview
         if args.flame_out_default:
             # Generate default filename from current time
             flame_graph_filename: str = time.strftime(DEFAULT_FLAME_GRAPH_FILENAME_FORMAT)
@@ -810,11 +821,13 @@ Special segments:
             # Create output folder if it doesn't exist
             if not os.path.exists(output_dir):
                 os.mkdir(output_dir)
+        elif args.preview_flame:
+            flame_graph_path = None
         else:
             flame_graph_path = args.flame_out
 
-        # Ensure path isn't reserved
-        if os.path.isreserved(flame_graph_path):
+        # Ensure output path isn't reserved
+        if flame_graph_path is not None and os.path.isreserved(flame_graph_path):
             exit_with_error(parser, f'Cannot write flame graph to reserved path {flame_graph_path!r}. Does it contain a reserved character?')
 
         # Locate flame graph root node by gradually moving it down the tree as needed
@@ -939,10 +952,21 @@ Special segments:
             show_drive_extra_counted_space = args.special == 'all',
         )
 
-        # Write to file
-        loading_message('Saving flame graph...')
-        flame_graph.save(flame_graph_path)
-        success_message(f'Wrote flame graph to {os.path.relpath(flame_graph_path)!r}.')
+        # Save or preview flame graph
+        if flame_graph_path is not None:
+            # Write to file
+            loading_message('Saving flame graph...')
+            flame_graph.save(flame_graph_path)
+            success_message(f'Wrote flame graph to {os.path.relpath(flame_graph_path)!r}.')
+
+            # Open in default image program if flag is enabled
+            if args.open_flame:
+                os.startfile(flame_graph_path)
+        else:
+            # Preview
+            loading_message('Opening flame graph...')
+            flame_graph.show()
+            success_message('Opened flame graph for previewing.')
 
 
     # Print usage if no I/O options were given and we did not already exit from completing a miscellaneous action
