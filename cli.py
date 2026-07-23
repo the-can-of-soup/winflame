@@ -1,7 +1,3 @@
-# TODO: Rigorously test CLI
-
-
-
 # IMPORTS
 
 from __future__ import annotations
@@ -12,7 +8,6 @@ from typing import Any, NoReturn
 import win32com.shell.shell
 import pickletools
 import argparse
-import tempfile
 import hashlib
 import pickle
 import shutil
