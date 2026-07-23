@@ -1,3 +1,9 @@
+"""
+Common globals for WinFlame.
+"""
+
+
+
 # CONSTANTS
 
 # Some of these constants are mirrored in "pyproject.toml"

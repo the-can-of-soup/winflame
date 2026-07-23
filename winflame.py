@@ -1,3 +1,7 @@
+"""
+Core module of the WinFlame command-line utility for generating flame graphs from file trees on Windows.
+"""
+
 # `pywin32` documentation: https://mhammond.github.io/pywin32/
 # Windows API reference: https://learn.microsoft.com/en-us/windows/win32/api/
 # Windows Data Access and Storage API documentation: https://learn.microsoft.com/en-us/windows/win32/api/_fs/
