@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any, NoReturn
 import win32com.shell.shell
 import pickletools
+import platform
 import argparse
 import hashlib
 import pickle
@@ -16,6 +17,7 @@ import sys
 import os
 
 import winflame
+import common
 
 
 
@@ -407,11 +409,11 @@ def cli(args: list[str] | None = None) -> None:
     # Argument parsing
 
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
-        prog='winflame',
-        description='Creates flame graphs to visualize file storage space.',
-        add_help=False, # We manually add help back later so that we can choose the argument group it is placed in
-        prefix_chars='-/',
-        formatter_class=NewlinePreservingHelpFormatter,
+        prog = common.PROGRAM_NAME,
+        description = common.PROGRAM_DESCRIPTION,
+        add_help = False, # We manually add the help option back later so that we can customize it
+        prefix_chars = '-/',
+        formatter_class = NewlinePreservingHelpFormatter,
     )
 
 
@@ -463,7 +465,7 @@ def cli(args: list[str] | None = None) -> None:
     output_config_options = parser.add_argument_group('Output configuration options',
         description='Extra configuration for the output options.')
 
-    output_config_options.add_argument('-v', '--open-flame', action='store_true', # -v for "view"
+    output_config_options.add_argument('-V', '--open-flame', action='store_true', # -V for "view"
         help='Open the flame graph in the default image program once it is completed when using -f or -F (implied when'
             + ' using -p).')
 
@@ -543,6 +545,8 @@ Special segments:
     miscellaneous_action_options = miscellaneous_options.add_mutually_exclusive_group()
     miscellaneous_action_options.add_argument('-h', '--help', '/?', action='store_true',
         help='Print this help text and exit.')
+    miscellaneous_action_options.add_argument('-v', '--version', action='store_true',
+        help='Print program version information and exit.')
     miscellaneous_action_options.add_argument('-C', '--colors', action='store_true',
         help='Print the flame graph / progress report color key and exit.')
     miscellaneous_action_options.add_argument('-d', '--delete-cache', '--clear-cache', action='store_true', # -d for "delete"
@@ -567,7 +571,21 @@ Special segments:
     if args.help:
         if args.silent:
             exit_with_error(parser, 'Cannot show help with --silent.')
+
+        # Print help and exit
         parser.print_help()
+        parser.exit()
+
+    # Version information
+    if args.version:
+        if args.silent:
+            exit_with_error(parser, 'Cannot show version information with --silent.')
+
+        # Print version information and exit
+        python_revision: str = platform.python_revision()
+        generic_message(f'{common.PROGRAM_NAME} {common.VERSION} running on {platform.platform()} with'
+            + f' {platform.python_implementation()} {platform.python_version()}'
+            + (f' (revision {python_revision})' if python_revision != '' else ''))
         parser.exit()
 
     # Color key
@@ -602,6 +620,7 @@ Special segments:
         # Footer
         output += '\n*Visible on flame graphs.\n'
 
+        # Print color key and exit
         sys.stdout.write(output)
         sys.stdout.flush()
         parser.exit()
@@ -614,6 +633,7 @@ Special segments:
             success_message('Cache cleared.')
         else:
             success_message('The cache is already empty.')
+
         parser.exit()
 
 
