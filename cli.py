@@ -544,7 +544,7 @@ Special segments:
         help='Print this help text and exit.')
     miscellaneous_options.add_argument('-C', '--colors', action='store_true',
         help='Print the flame graph / progress report color key and exit.')
-    miscellaneous_options.add_argument('-d', '--clear-cache', action='store_true', # -d for "delete"
+    miscellaneous_options.add_argument('-d', '--delete-cache', '--clear-cache', action='store_true', # -d for "delete"
         help='Delete the file tree cached with -c (if there is one) and exit.')
     miscellaneous_options.add_argument('-s', '--silent', action='store_true',
         help='Suppress all output except errors and warnings.')
@@ -605,8 +605,9 @@ Special segments:
         parser.exit()
 
     # Clear cache
-    if args.clear_cache:
+    if args.delete_cache:
         if os.path.exists(cache_dir):
+            loading_message('Clearing cache...')
             shutil.rmtree(cache_dir)
             success_message('Cache cleared.')
         else:
