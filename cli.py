@@ -540,12 +540,14 @@ Special segments:
 
     miscellaneous_options = parser.add_argument_group('Miscellaneous options')
 
-    miscellaneous_options.add_argument('-h', '--help', '/?', action='store_true',
+    miscellaneous_action_options = miscellaneous_options.add_mutually_exclusive_group()
+    miscellaneous_action_options.add_argument('-h', '--help', '/?', action='store_true',
         help='Print this help text and exit.')
-    miscellaneous_options.add_argument('-C', '--colors', action='store_true',
+    miscellaneous_action_options.add_argument('-C', '--colors', action='store_true',
         help='Print the flame graph / progress report color key and exit.')
-    miscellaneous_options.add_argument('-d', '--delete-cache', '--clear-cache', action='store_true', # -d for "delete"
+    miscellaneous_action_options.add_argument('-d', '--delete-cache', '--clear-cache', action='store_true', # -d for "delete"
         help='Delete the file tree cached with -c (if there is one) and exit.')
+
     miscellaneous_options.add_argument('-s', '--silent', action='store_true',
         help='Suppress all output except errors and warnings.')
     miscellaneous_options.add_argument('-n', '--no-warnings', action='store_true',
