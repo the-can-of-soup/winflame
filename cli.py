@@ -770,9 +770,12 @@ Special segments:
         # Count nodes
         loading_message('    Node count: loading...')
         node_count: int = 0
-        for _ in file_tree_root.descendants_iter(include_self=True):
+        error_node_count: int = 0
+        for node in file_tree_root.descendants_iter(include_self=True):
             node_count += 1
-        generic_message(f'    Node count: {node_count:,}')
+            if node.is_error:
+                error_node_count += 1
+        generic_message(f'    Node count: {node_count:,} (including {error_node_count:,} error{"" if error_node_count == 1 else "s"})')
 
     if output_mode_cache_tree:
         # Save file tree to the cache
