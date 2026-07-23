@@ -507,7 +507,8 @@ Allowed values:
 ''')
     flame_graph_options.add_argument('-W', '--min-label-width', type=int_in_range(1, None), default=15,
         help='Minimum width of a rectangle in pixels for a label to be drawn on it. (Default: 15)')
-
+    flame_graph_options.add_argument('-P', '--hide-full-root-path', action='store_true', # -P for "private"
+        help='Show only the filename part of the flame root\'s path on its label. Has no effect on drive roots.')
     flame_graph_options.add_argument('-g', '--font-file', # -g because I ran out of letters
         help='Font file to use for labels. Accepts TTF, OTF, PCF, BDF, and PIL font files. If omitted, a default font'
             + ' is used.')
@@ -974,6 +975,7 @@ Special segments:
             foreground_color = args.fg_color,
             label_visibility = winflame.LabelVisibility(args.labels),
             min_label_width = args.min_label_width,
+            hide_full_root_path = args.hide_full_root_path,
             font = font,
             show_drive_free_space = args.special in ('unaccounted-free', 'all'),
             show_drive_unaccounted_space = args.special in ('unaccounted', 'unaccounted-free', 'all'),

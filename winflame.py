@@ -435,6 +435,8 @@ class FileNode:
 
             # Get drive capacity and free space
 
+            self._is_drive_root: bool
+
             if self.is_root:
                 # Check if the node is a drive root
                 drive_letter: str; path_on_drive: str
@@ -481,7 +483,7 @@ class FileNode:
                 self._is_drive_root = False
 
 
-            # Windows file attributes
+            # Get Windows file attributes
 
             self._windows_file_attributes = WindowsFileAttributes(win32file.GetFileAttributes(path))
 
@@ -581,6 +583,7 @@ class FileNode:
             self._physical_size = 0
             self._total_logical_size = 0
             self._total_physical_size = 0
+            self._is_drive_root = False
             self._windows_file_attributes = WindowsFileAttributes(0)
             self._progress_report_children = OrderedDict()
             self._children = {}
@@ -1281,6 +1284,7 @@ class FileNode:
             foreground_color: tuple[int, int, int, int] = (0, 0, 0, 255),
             label_visibility: LabelVisibility = LabelVisibility.ALL,
             min_label_width: int = 15,
+            hide_full_root_path: bool = False,
             font: ImageFont.ImageFont | ImageFont.FreeTypeFont | None = None,
             show_drive_free_space: bool = True,
             show_drive_unaccounted_space: bool = True,
@@ -1315,6 +1319,9 @@ class FileNode:
         :param min_label_width: If a rectangle is less than this many pixels wide, its label will not be drawn. Note
             that lower values may take longer to render due to increased overall label count. Must be at least ``1``.
         :type min_label_width: int
+        :param hide_full_root_path: If ``True``, only the filename part of the node's path is shown on its label. Has no
+            effect on drive roots.
+        :type hide_full_root_path: bool
         :param font: The font to use for node labels. If ``None``, a default font is used.
         :type font: ImageFont.ImageFont | ImageFont.FreeTypeFont | None
         :param show_drive_free_space: Only applies if the node is a drive root and ``use_physical_size`` is true. If
@@ -1449,7 +1456,11 @@ class FileNode:
             if is_node:
                 node_depth = node.depth - base_depth
                 node_size_bytes = node.total_physical_size if use_physical_size else node.total_logical_size
-                label_text = node.path if node_depth == 0 else node.filename
+                label_text = (
+                    node.path
+                        if (node_depth == 0 and not hide_full_root_path) or node.is_drive_root
+                            else node.filename
+                )
             else:
                 node_depth = 0
                 node_size_bytes = node[1]
