@@ -1,0 +1,60 @@
+[project]
+
+# Some of these fields are mirrored in "common.py"
+name = "winflame"
+version = "1.0.0"
+description = "Creates flame graphs to visualize file storage space."
+keywords = ["storage", "file", "space", "tree", "flame", "graph", "distribution", "windows", "command", "command-line",
+    "command line", "cli"]
+
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE\\.txt"]
+
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Natural Language :: English",
+
+    "Environment :: Console",
+    "Operating System :: Microsoft :: Windows",
+    "Typing :: Typed",
+
+    "Topic :: Utilities",
+    "Topic :: System",
+    "Topic :: System :: Filesystems",
+
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Developers",
+
+    "Programming Language :: Python",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+
+# Dependencies are mirrored in "requirements.txt"
+dependencies = [
+    "pywin32~=312",
+    "pillow~=12.3.0",
+]
+requires-python = ">= 3.10"
+
+
+[project.urls]
+
+github = "https://github.com/the-can-of-soup/winflame"
+repository = "https://github.com/the-can-of-soup/winflame.git"
+issues = "https://github.com/the-can-of-soup/winflame/issues"
+
+
+[project.scripts]
+
+# Terminal command configuration
+winflame = "winflame.cli:cli"
