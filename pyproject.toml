@@ -58,3 +58,8 @@ issues = "https://github.com/the-can-of-soup/winflame/issues"
 
 # Terminal command configuration
 winflame = "winflame.cli:cli"
+
+[project.entry-points."pipx.run"]
+
+# `pipx run` configuration
+winflame = "winflame.cli:cli"
