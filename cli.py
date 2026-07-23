@@ -401,6 +401,7 @@ def cli(args: list[str] | None = None) -> None:
     global silent_mode
     global suppress_warnings
 
+
     # Compute paths
 
     program_dir: str = os.path.dirname(os.path.abspath(__file__))
