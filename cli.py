@@ -767,6 +767,13 @@ Special segments:
     }
     Build timestamp: {time.strftime('%m/%d/%Y, %I:%M:%S %p', time.localtime(file_tree_root.build_timestamp))}''')
 
+        # Count nodes
+        loading_message('    Node count: loading...')
+        node_count: int = 0
+        for _ in file_tree_root.descendants_iter(include_self=True):
+            node_count += 1
+        generic_message(f'    Node count: {node_count:,}')
+
     if output_mode_cache_tree:
         # Save file tree to the cache
 
