@@ -1083,7 +1083,7 @@ class FileNode:
         output += '\033[0J' # Clear from cursor until end of screen
         output += progress_report # Print progress report
         output += '\033[G' # Move cursor to leftmost column
-        output += '\033[F' * (len(lines) - 1) # Move cursor up to start of first line
+        output += f'\033[{len(lines) - 1}F' # Move cursor up to start of first line
         sys.stdout.write(output)
         sys.stdout.flush()
 
