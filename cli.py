@@ -17,7 +17,6 @@ import platform
 import argparse
 import hashlib
 import pickle
-import shutil
 import time
 import sys
 import os
@@ -280,15 +279,16 @@ def exit_with_error(parser: argparse.ArgumentParser, message: str, status: int =
 
 def int_in_range(min_value: int | None = None, max_value: int | None = None) -> Callable[[Any], int]:
     """
-    Factory function that produces a callable that converts values into ``int`` instances, but raises ``ValueError`` if
-    the resulting ``int`` would be outside a specified range, or if the input value cannot be converted.
+    Factory function that produces a callable that converts values into ``int`` instances, but raises
+    ``argparse.ArgumentTypeError`` if the resulting ``int`` would be outside a specified range, or if the input value
+    cannot be converted.
 
     :param min_value: The minimum allowed return value of the callable, or ``None`` for no lower bound.
     :type min_value: int | None
     :param max_value: The maximum allowed return value of the callable, or ``None`` for no upper bound.
     :type max_value: int | None
-    :return: A callable that converts values into ``int`` instances, or raises ``ValueError`` if they are out of bounds
-        or cannot be converted.
+    :return: A callable that converts values into ``int`` instances, or raises ``argparse.ArgumentTypeError`` if they
+        are out of bounds or cannot be converted.
     :rtype: Callable[[Any], int]
     """
     def convert(value: Any) -> int:
@@ -296,15 +296,18 @@ def int_in_range(min_value: int | None = None, max_value: int | None = None) -> 
         nonlocal max_value
 
         # Convert to `int`
-        int_: int = int(value)
+        try:
+            int_: int = int(value)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f'Invalid integer: {value!r}') from None
 
         # Ensure in-bounds
         if min_value is not None and int_ < min_value:
             max_value_notation: int | str = '\u221e' if max_value is None else max_value
-            raise ValueError(f'Value {int_} is outside the allowed range [{min_value}, {max_value_notation}]')
+            raise argparse.ArgumentTypeError(f'Value {int_} is outside the allowed range [{min_value}, {max_value_notation}]')
         if max_value is not None and int_ > max_value:
             min_value_notation: int | str = '-\u221e' if min_value is None else min_value
-            raise ValueError(f'Value {int_} is outside the allowed range [{min_value_notation}, {max_value}]')
+            raise argparse.ArgumentTypeError(f'Value {int_} is outside the allowed range [{min_value_notation}, {max_value}]')
 
         return int_
 
@@ -320,7 +323,7 @@ def hex_color(hex_code: str, is_rgba: bool = False) -> tuple[int, int, int] | tu
     :type is_rgba: bool
     :return: The color in RGB format if ``is_rgba`` is false, or RGBA format if ``is_rgba`` is true.
     :rtype: tuple[int, int, int] | tuple[int, int, int, int]
-    :raises ValueError: If the hex color code is invalid.
+    :raises argparse.ArgumentTypeError: If the hex color code is invalid.
     """
     hex_code = hex_code.removeprefix('#').lower()
 
@@ -329,14 +332,14 @@ def hex_color(hex_code: str, is_rgba: bool = False) -> tuple[int, int, int] | tu
     if len(hex_code) == 6:
         hex_code += 'ff'
     if len(hex_code) != 8:
-        raise ValueError('Hex color code must have 3, 4, 6, or 8 digits')
+        raise argparse.ArgumentTypeError('Hex color code must have 3, 4, 6, or 8 digits')
 
     hex_parts: tuple[str, str, str, str] = (hex_code[:2], hex_code[2:4], hex_code[4:6], hex_code[6:])
     # noinspection PyTypeChecker
     rgba: tuple[int, int, int, int] = tuple(map(lambda hex_part: int(hex_part, 16), hex_parts))
 
     if rgba[3] != 255 and not is_rgba:
-        raise ValueError('Transparency is not supported by this argument')
+        raise argparse.ArgumentTypeError('Transparency is not supported by this argument')
 
     return rgba if is_rgba else rgba[:3]
 
@@ -386,6 +389,18 @@ class NewlinePreservingHelpFormatter(argparse.HelpFormatter):
 
         return result_lines
 
+class SpacedOutErrorArgumentParser(argparse.ArgumentParser):
+    """
+    Subclass of ``argparse.ArgumentParser`` that adds a blank line between the usage text and error message when an
+    invalid argument is passed.
+    """
+
+    def error(self, message: str) -> NoReturn:
+        self.print_usage()
+        print('')
+        print(f'{self.prog}: error: {message}')
+        sys.exit(2)
+
 
 
 # MAIN
@@ -415,7 +430,7 @@ def cli(args: list[str] | None = None) -> None:
 
     # Argument parsing
 
-    parser: argparse.ArgumentParser = argparse.ArgumentParser(
+    parser: argparse.ArgumentParser = SpacedOutErrorArgumentParser(
         prog = common.PROGRAM_NAME,
         description = common.PROGRAM_DESCRIPTION,
         add_help = False, # We manually add the help option back later so that we can customize it
@@ -635,12 +650,12 @@ Special segments:
 
     # Clear cache
     if args.delete_cache:
-        if os.path.exists(cache_dir):
-            loading_message('Clearing cache...')
-            shutil.rmtree(cache_dir)
-            success_message('Cache cleared.')
+        if os.path.exists(cached_file_tree_path):
+            loading_message('Deleting cached file tree...')
+            os.remove(cached_file_tree_path)
+            success_message('Deleted cached file tree.')
         else:
-            success_message('The cache is already empty.')
+            success_message('There is no cached file tree.')
 
         parser.exit()
 
