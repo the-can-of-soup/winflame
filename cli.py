@@ -573,11 +573,12 @@ Special segments:
         help='Color of alternate data streams. (Run winflame -C to see default)')
 
     flame_graph_options.add_argument('-3', '--free-color', type=hex_color_rgba,
-        help='Color of the Free special segment. (Run winflame -C to see default)')
+        help='Color of the Free special segment. See help on -S for more info. (Run winflame -C to see default)')
     flame_graph_options.add_argument('-4', '--unaccounted-color', type=hex_color_rgba,
-        help='Color of the Unaccounted special segment. (Run winflame -C to see default)')
+        help='Color of the Unaccounted special segment. See help on -S for more info. (Run winflame -C to see default)')
     flame_graph_options.add_argument('-5', '--extra-counted-color', type=hex_color_rgba,
-        help='Color of the Extra-counted special segment. (Run winflame -C to see default)')
+        help='Color of the Extra-counted special segment. See help on -S for more info. (Run winflame -C to see'
+            + ' default)')
 
 
     miscellaneous_options = parser.add_argument_group('Miscellaneous options')
