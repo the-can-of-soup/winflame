@@ -223,6 +223,38 @@ class FileType(enum.Enum):
         return FILE_TYPE_COLORS[self]
 
 
+class SpecialSegment(enum.Enum):
+    """
+    A special segment in flame graphs.
+
+    A special segment is a labeled rectangle at the flame graph's root level that represents some global metric about
+    the graph.
+
+    See also: ``FileNode.create_flame_graph``
+    """
+    UNACCOUNTED_DRIVE_SPACE = 0
+    UNUSED_DRIVE_SPACE = 1
+    EXTRA_COUNTED_DRIVE_SPACE = 2
+
+    @property
+    def label_text(self) -> str:
+        """
+        The text of the special segment's label.
+
+        :rtype: str
+        """
+        return SPECIAL_SEGMENT_LABELS[self]
+
+    @property
+    def color_rgba(self) -> tuple[int, int, int, int]:
+        """
+        A color in RGBA format to display the special segment.
+
+        :rtype: tuple[int, int, int, int]
+        """
+        return SPECIAL_SEGMENT_COLORS[self]
+
+
 # noinspection PyProtectedMember
 class FileNode:
     def __init__(
@@ -1284,8 +1316,6 @@ class FileNode:
             max_depth: int | None = None,
             width: int = 1920,
             layer_height: int = 20,
-            background_color: tuple[int, int, int, int] = (255, 255, 255, 255),
-            foreground_color: tuple[int, int, int, int] = (0, 0, 0, 255),
             label_visibility: LabelVisibility = LabelVisibility.ALL,
             min_label_width: int = 15,
             hide_full_root_path: bool = False,
@@ -1293,11 +1323,18 @@ class FileNode:
             show_drive_free_space: bool = True,
             show_drive_unaccounted_space: bool = True,
             show_drive_extra_counted_space: bool = True,
+            background_color: tuple[int, int, int, int] = (255, 255, 255, 255),
+            border_color: tuple[int, int, int, int] = (0, 0, 0, 255),
+            label_color: tuple[int, int, int, int] = (0, 0, 0, 255),
+            file_type_colors: dict[FileType, tuple[int, int, int, int]] | None = None,
+            special_segment_colors: dict[SpecialSegment, tuple[int, int, int, int]] | None = None,
     ) -> Image.Image:
         """
         Creates a flame graph visualization of the file tree starting from this node.
 
         Each "layer" of the graph corresponds to a specific node depth, with the "root layer" being this node's depth.
+
+        See also: ``SpecialSegment``
 
         :param use_physical_size: If ``True``, the physical size of nodes will be displayed. If ``False``, their logical
             size will be displayed.
@@ -1309,17 +1346,11 @@ class FileNode:
         :type width: int
         :param layer_height: The height of each layer in pixels. Must be greater than ``1``.
         :type layer_height: int
-        :param background_color: The background color of the graph in RGBA format.
-        :type background_color: tuple[int, int, int, int]
-        :param foreground_color: The color of the graph's text and outlines in RGBA format.
-        :type foreground_color: tuple[int, int, int, int]
         :param label_visibility: Determines where to draw labels on rectangles. ``LabelVisibility.ALL`` will always draw
-            labels. ``LabelVisibility.SPECIAL_SEGMENTS`` will only draw labels on the rectangles created by
-            ``show_drive_free_space``, ``show_drive_unaccounted_space``, and ``show_drive_extra_counted_space``.
-            ``LabelVisibility.FILES`` will draw labels on all rectangles except those that have labels with
-            ``LabelVisibility.SPECIAL_SEGMENTS``, i.e. all nodes of the file tree. ``LabelVisibility.NONE`` will never
-            draw labels.
-        :type label_visibility: bool
+            labels. ``LabelVisibility.SPECIAL_SEGMENTS`` will only draw labels on special segments.
+            ``LabelVisibility.FILES`` will draw labels on all rectangles except special segments, i.e. all nodes of the
+            file tree. Finally, ``LabelVisibility.NONE`` will never draw labels.
+        :type label_visibility: LabelVisibility
         :param min_label_width: If a rectangle is less than this many pixels wide, its label will not be drawn. Note
             that lower values may take longer to render due to increased overall label count. Must be at least ``1``.
         :type min_label_width: int
@@ -1329,32 +1360,53 @@ class FileNode:
         :param font: The font to use for node labels. If ``None``, a default font is used.
         :type font: ImageFont.ImageFont | ImageFont.FreeTypeFont | None
         :param show_drive_free_space: Only applies if the node is a drive root and ``use_physical_size`` is true. If
-            ``True``, a rectangle will be drawn at the root layer representing the amount of free space on the drive.
-            Extra-counted space is not included (if the data to compute that is accessible); see
-            ``show_drive_extra_counted_space`` for info about extra-counted space.
+            ``True``, a special segment will be drawn representing the amount of free space on the drive. Extra-counted
+            space is not included (if the data to compute that is accessible); see ``show_drive_extra_counted_space``
+            for info about extra-counted space.
         :type show_drive_free_space: bool
         :param show_drive_unaccounted_space: Only applies if the node is a drive root and ``use_physical_size`` is true.
-            If ``True``, a rectangle will be drawn at the root layer representing the amount of extra used space on the
-            drive that was not accounted for by the other nodes on the graph. For example, if Windows reports the drive
-            to have a 400 GB capacity with 100 GB of free space, but the combined size of the nodes on the graph is only
-            250 GB, the unaccounted space would be 50 GB. In practice, this should include files that the program failed
-            to retrieve the metadata of. If the file tree object structure was not created with administrator
-            privileges, the necessary data to compute this is inaccessible, and so this will not be drawn.
+            If ``True``, a special segment will be drawn representing the amount of extra used space on the drive that
+            was not accounted for by the other nodes on the graph. For example, if Windows reports the drive to have a
+            400 GB capacity with 100 GB of free space, but the combined size of the nodes on the graph is only 250 GB,
+            the unaccounted space would be 50 GB. In practice, this should include files that the program failed to
+            retrieve the metadata of. If the file tree object structure was not created with administrator privileges,
+            the necessary data to compute this is inaccessible, and so this will not be drawn.
         :type show_drive_unaccounted_space: bool
         :param show_drive_extra_counted_space: Only applies if the node is a drive root and ``use_physical_size`` is
-            true. If ``True``, a rectangle will be drawn at the root layer representing the amount of space used by
-            nodes on the graph that shouldn't have been used because it overlaps the free space on the drive. For
-            example, if Windows reports the drive to have a 400 GB capacity with 100 GB of free space, but the combined
-            size of the nodes on the graph is 350 GB, the extra-counted space would be 50 GB. If the file tree object
-            structure was not created with administrator privileges, the necessary data to compute this is inaccessible,
-            and so this will not be drawn.
+            true. If ``True``, a special segment will be drawn representing the amount of space used by nodes on the
+            graph that shouldn't have been used because it overlaps the free space on the drive. For example, if Windows
+            reports the drive to have a 400 GB capacity with 100 GB of free space, but the combined size of the nodes on
+            the graph is 350 GB, the extra-counted space would be 50 GB. If the file tree object structure was not
+            created with administrator privileges, the necessary data to compute this is inaccessible, and so this will
+            not be drawn.
         :type show_drive_extra_counted_space: bool
+        :param background_color: The background color of the graph in RGBA format.
+        :type background_color: tuple[int, int, int, int]
+        :param border_color: The color of the graph's rectangle outlines in RGBA format.
+        :type border_color: tuple[int, int, int, int]
+        :param label_color: The color of the graph's rectangle labels in RGBA format.
+        :type label_color: tuple[int, int, int, int]
+        :param file_type_colors: Overrides for the colors of different file types' rectangles. Any omitted file types
+            will use their default color. If ``None``, all file types will use their default color.
+        :type file_type_colors: dict[FileType, tuple[int, int, int, int]] | None
+        :param special_segment_colors: Overrides for the colors of different special segments' rectangles. Any omitted
+            special segments will use their default color. If ``None``, all special segments will use their default
+            color.
+        :type special_segment_colors: dict[SpecialSegment, tuple[int, int, int, int]] | None
         :return: The flame graph image.
         :rtype: Image.Image
         """
+        # Create rectangle color table
+        color_table: dict[FileType | SpecialSegment, tuple[int, int, int, int]] = {}
+        for file_type in FileType:
+            color_table[file_type] = file_type_colors.get(file_type, file_type.color_rgb + (255,))
+        for special_segment in SpecialSegment:
+            color_table[special_segment] = special_segment_colors.get(special_segment, special_segment.color_rgba)
+
+
         # Compute drive free, unaccounted, and extra-counted space
         #
-        # `None` means the respective statistic will not be displayed.
+        # `None` means the respective special segment will not be displayed.
 
         drive_free_space: int | None = None
         drive_unaccounted_space: int | None = None # Negative values indicate extra-counted space
@@ -1373,7 +1425,7 @@ class FileNode:
                 # Compute
                 drive_unaccounted_space = self.drive_used_space - self.total_physical_size
 
-                # Check if the statistic should be shown
+                # Check if the special segment should be shown
                 is_shown: bool = show_drive_unaccounted_space if drive_unaccounted_space >= 0 else show_drive_extra_counted_space
                 if not is_shown:
                     drive_unaccounted_space = None
@@ -1426,24 +1478,30 @@ class FileNode:
 
             "Special segments" are drawn like a node at the root layer and have no children.
 
+            See also: ``SpecialSegment``
+
             :param node: If drawing a node, the node to draw. Otherwise, a ``(label, size, color)`` tuple where
                 ``label`` is the text of the label, ``size`` is the width of the special segment in bytes, and ``color``
                 is the color of the special segment in RGBA format.
             :type node: FileNode | tuple[str, int, tuple[int, int, int, int]]
-            :param horizontal_bytes_offset: The number of bytes to offset the node/special segment horizontally in the
+            :param horizontal_bytes_offset: The number of bytes to offset the node / special segment horizontally in the
                 graph.
             :type horizontal_bytes_offset: int
-            :return: The width of the node/special segment in bytes.
+            :return: The width of the node / special segment in bytes.
             :rtype: int
             """
             nonlocal use_physical_size
             nonlocal max_depth
             nonlocal layer_height
-            nonlocal foreground_color
             nonlocal label_visibility
             nonlocal min_label_width
             nonlocal font
+            nonlocal label_color
+            nonlocal border_color
 
+            nonlocal color_table
+            nonlocal drive_free_space
+            nonlocal drive_unaccounted_space
             nonlocal base_depth
             nonlocal layer_count
             nonlocal pixels_per_byte
@@ -1452,7 +1510,7 @@ class FileNode:
 
             nonlocal draw_node
 
-            # Get node/special segment properties
+            # Get node / special segment properties
             is_node: bool = isinstance(node, FileNode)
             node_depth: int # Relative to the root layer
             node_size_bytes: int
@@ -1482,7 +1540,11 @@ class FileNode:
             rectangle_width: float = node_size_bytes * pixels_per_byte
 
             # Get rectangle color
-            rectangle_color: tuple[int, int, int, int] = node.color_rgb + (255,) if is_node else node[2]
+            rectangle_color: tuple[int, int, int, int]
+            if is_node:
+                rectangle_color = ERROR_COLOR if node.is_error else color_table[node.file_type]
+            else:
+                rectangle_color = node[2]
 
             # Draw rectangle
             draw.rectangle(
@@ -1491,7 +1553,7 @@ class FileNode:
                     (round(rectangle_x + rectangle_width), round(rectangle_y + layer_height))
                 ],
                 fill=rectangle_color,
-                outline=foreground_color,
+                outline=border_color,
                 width=1,
             )
 
@@ -1515,7 +1577,7 @@ class FileNode:
                 label_canvas_draw.text(
                     xy = (label_x_on_canvas, label_y_on_canvas),
                     text = label_text,
-                    fill = foreground_color,
+                    fill = label_color,
                     font = font,
                     anchor = 'mm',
                 )
@@ -1552,11 +1614,23 @@ class FileNode:
 
         # Draw special segments
         if drive_unaccounted_space is not None and drive_unaccounted_space >= 0:
-            horizontal_bytes_offset += draw_node(('Unaccounted', drive_unaccounted_space, UNACCOUNTED_COLOR), horizontal_bytes_offset)
+            horizontal_bytes_offset += draw_node((
+                SpecialSegment.UNACCOUNTED_DRIVE_SPACE.label_text, # Label text
+                drive_unaccounted_space, # Size
+                color_table[SpecialSegment.UNACCOUNTED_DRIVE_SPACE], # Rectangle color
+            ), horizontal_bytes_offset)
         if drive_free_space is not None:
-            horizontal_bytes_offset += draw_node(('Free', drive_free_space, FREE_COLOR), horizontal_bytes_offset)
+            horizontal_bytes_offset += draw_node((
+                SpecialSegment.UNUSED_DRIVE_SPACE.label_text, # Label text
+                drive_free_space, # Size
+                color_table[SpecialSegment.UNUSED_DRIVE_SPACE], # Rectangle color
+            ), horizontal_bytes_offset)
         if drive_unaccounted_space is not None and drive_unaccounted_space < 0:
-            horizontal_bytes_offset += draw_node(('Extra-counted', -drive_unaccounted_space, EXTRA_COUNTED_COLOR), horizontal_bytes_offset)
+            horizontal_bytes_offset += draw_node((
+                SpecialSegment.EXTRA_COUNTED_DRIVE_SPACE.label_text, # Label text
+                -drive_unaccounted_space, # Size
+                color_table[SpecialSegment.EXTRA_COUNTED_DRIVE_SPACE], # Rectangle color
+            ), horizontal_bytes_offset)
 
         # Return image
         return im
@@ -1585,10 +1659,16 @@ FILE_TYPE_COLORS: dict[FileType, tuple[int, int, int]] = {
 # Progress report colors
 NOT_STARTED_COLOR: tuple[int, int, int] = (100, 100, 100)
 COMPLETED_COLOR: tuple[int, int, int] = (50, 255, 50) # Only used by the checkbox; not the node itself
-ERROR_COLOR: tuple[int, int, int] = (255, 50, 50)
+ERROR_COLOR: tuple[int, int, int] = (255, 50, 50) # Also technically used in flame graphs, but never visible because all affected nodes should have zero size
 DESCENDANT_ERROR_COLOR: tuple[int, int, int] = (255, 255, 0) # Only used by the checkbox; not the node itself
 
-# Special segment colors
-UNACCOUNTED_COLOR: tuple[int, int, int, int] = (255, 50, 50, 255)
-FREE_COLOR: tuple[int, int, int, int] = (200, 200, 200, 255)
-EXTRA_COUNTED_COLOR: tuple[int, int, int, int] = (255, 255, 0, 255)
+SPECIAL_SEGMENT_COLORS: dict[SpecialSegment, tuple[int, int, int, int]] = {
+    SpecialSegment.UNACCOUNTED_DRIVE_SPACE: (255, 50, 50, 255),
+    SpecialSegment.UNUSED_DRIVE_SPACE: (200, 200, 200, 255),
+    SpecialSegment.EXTRA_COUNTED_DRIVE_SPACE: (255, 255, 0, 255),
+}
+SPECIAL_SEGMENT_LABELS: dict[SpecialSegment, str] = {
+    SpecialSegment.UNACCOUNTED_DRIVE_SPACE: 'Unaccounted',
+    SpecialSegment.UNUSED_DRIVE_SPACE: 'Free',
+    SpecialSegment.EXTRA_COUNTED_DRIVE_SPACE: 'Extra-counted',
+}

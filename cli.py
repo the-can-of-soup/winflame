@@ -46,8 +46,8 @@ WARNING_COLOR: tuple[int, int, int] = (255, 255, 0)
 ERROR_COLOR: tuple[int, int, int] = (255, 50, 50)
 
 COLOR_KEY: list[tuple[str, tuple[int, int, int]] | None] = [ # Each list element is a line; `None` indicates a blank line
-    ('Regular file*', winflame.FileType.REGULAR_FILE.color_rgb),
     ('Directory*', winflame.FileType.DIRECTORY.color_rgb),
+    ('Regular file*', winflame.FileType.REGULAR_FILE.color_rgb),
     ('Alternate data stream*', winflame.FileType.ALTERNATE_DATA_STREAM.color_rgb),
     ('Symlink', winflame.FileType.SYMLINK.color_rgb),
     ('Junction', winflame.FileType.JUNCTION.color_rgb),
@@ -57,9 +57,9 @@ COLOR_KEY: list[tuple[str, tuple[int, int, int]] | None] = [ # Each list element
     ('Processing not started', winflame.NOT_STARTED_COLOR),
     ('Error during processing', winflame.ERROR_COLOR),
     None,
-    ('Drive unaccounted space*', winflame.UNACCOUNTED_COLOR[:3]),
-    ('Drive free space*', winflame.FREE_COLOR[:3]),
-    ('Drive extra-counted space*', winflame.EXTRA_COUNTED_COLOR[:3]),
+    ('Drive unaccounted space*', winflame.SpecialSegment.UNACCOUNTED_DRIVE_SPACE.color_rgba[:3]),
+    ('Drive free space*', winflame.SpecialSegment.UNUSED_DRIVE_SPACE.color_rgba[:3]),
+    ('Drive extra-counted space*', winflame.SpecialSegment.EXTRA_COUNTED_DRIVE_SPACE.color_rgba[:3]),
 ]
 
 
@@ -493,7 +493,8 @@ def cli(args: list[str] | None = None) -> None:
 
 
     flame_graph_options = parser.add_argument_group('Flame graph options',
-        description='Configuration for the flame graph when using -f, -F, or -p.')
+        description='Configuration for the flame graph when using -f, -F, or -p. All color options are hex color codes'
+        + ' supporting RGB and RGBA with the \'#\' prefix being optional.')
 
     flame_graph_options.add_argument('-R', '--flame-root',
         help='Build the flame graph from a different node of the file tree than the root. If provided, this should be a'
@@ -511,12 +512,6 @@ def cli(args: list[str] | None = None) -> None:
         help='Width of the graph in pixels. (Default: 1920)')
     flame_graph_options.add_argument('-H', '--layer-height', type=int_in_range(2, None), default=20,
         help='Height of each graph layer in pixels. (Default: 20)')
-
-    flame_graph_options.add_argument('-B', '--bg-color', type=hex_color_rgba, default=(255, 255, 255, 255),
-        help='Color of the graph\'s background as a hex color code with an optional \'#\' prefix. (Default: #ffff)')
-    flame_graph_options.add_argument('-T', '--fg-color', type=hex_color_rgba, default=(0, 0, 0, 255), # -T for "text"
-        help='Color of rectangle outlines and labels as a hex color code with an optional \'#\' prefix. (Default:'
-            + ' #000f)')
 
     flame_graph_options.add_argument('-l', '--labels', choices=['none', 'files', 'special', 'all'], default='all',
         help='''Visibility of labels. (Default: 'all')
@@ -554,13 +549,35 @@ Special segments:
     + ''' Additionally, special segments are always hidden if -L is supplied because they have no logical size'''
     + ''' equivalents.
 
-    Free: Represents the amount of free (unused) space on the drive.
+    Free: Represents the amount of free (unused) space on the drive. Extra-counted space is subtracted from this.
     Unaccounted*: Represents the amount of used space on the drive that the program could not identify the source of.
     Extra-counted*: Represents the amount of unused space on the drive that the program actually over-counted as used'''
     + ''' by files.
     
     *This special segment is not available unless the file tree was built with administrator privileges due to'''
-    + ''' Windows API limitations.''')
+    + ''' Windows API limitations.
+''')
+
+    flame_graph_options.add_argument('-B', '--bg-color', '--background-color', type=hex_color_rgba, default=(255, 255, 255, 255),
+        help='Color of the graph\'s background. (Default: #ffff)')
+    flame_graph_options.add_argument('-a', '--border-color', type=hex_color_rgba, default=(0, 0, 0, 255), # -a for "around" (really running out of letters here)
+        help='Color of rectangle outlines. (Default: #000f)')
+    flame_graph_options.add_argument('-T', '--label-color', '--text-color', type=hex_color_rgba, default=(0, 0, 0, 255), # -T for "text"
+        help='Color of rectangle labels. (Default: #000f)')
+
+    flame_graph_options.add_argument('-0', '--dir-color', '--directory-color', type=hex_color_rgba,
+        help='Color of directories. (Run winflame -C to see default)')
+    flame_graph_options.add_argument('-1', '--file-color', '--regular-file-color', type=hex_color_rgba,
+        help='Color of regular files. (Run winflame -C to see default)')
+    flame_graph_options.add_argument('-2', '--ads-color', '--alternate-data-stream-color', type=hex_color_rgba,
+        help='Color of alternate data streams. (Run winflame -C to see default)')
+
+    flame_graph_options.add_argument('-3', '--free-color', type=hex_color_rgba,
+        help='Color of the Free special segment. (Run winflame -C to see default)')
+    flame_graph_options.add_argument('-4', '--unaccounted-color', type=hex_color_rgba,
+        help='Color of the Unaccounted special segment. (Run winflame -C to see default)')
+    flame_graph_options.add_argument('-5', '--extra-counted-color', type=hex_color_rgba,
+        help='Color of the Extra-counted special segment. (Run winflame -C to see default)')
 
 
     miscellaneous_options = parser.add_argument_group('Miscellaneous options')
@@ -571,7 +588,7 @@ Special segments:
     miscellaneous_action_options.add_argument('-v', '--version', action='store_true',
         help='Print program version information and exit.')
     miscellaneous_action_options.add_argument('-C', '--colors', action='store_true',
-        help='Print the flame graph / progress report color key and exit.')
+        help='Print the flame graph / progress report default color key and exit.')
     miscellaneous_action_options.add_argument('-d', '--delete-cache', '--clear-cache', action='store_true', # -d for "delete"
         help='Delete the file tree cached with -c (if there is one) and exit.')
 
@@ -641,7 +658,7 @@ Special segments:
             output += '\033[0m\n'
 
         # Footer
-        output += '\n*Visible on flame graphs.\n'
+        output += '\n*On flame graphs, this is just the default.\n'
 
         # Print color key and exit
         sys.stdout.write(output)
@@ -985,6 +1002,16 @@ Special segments:
                 case _: # Assumed to be PIL format
                     font = ImageFont.load(args.font_file)
 
+        # Get color overrides
+        file_type_color_overrides: dict[winflame.FileType, tuple[int, int, int, int]] = {}
+        if args.dir_color is not None: file_type_color_overrides[winflame.FileType.DIRECTORY] = args.dir_color
+        if args.file_color is not None: file_type_color_overrides[winflame.FileType.REGULAR_FILE] = args.file_color
+        if args.ads_color is not None: file_type_color_overrides[winflame.FileType.ALTERNATE_DATA_STREAM] = args.ads_color
+        special_segment_color_overrides: dict[winflame.SpecialSegment, tuple[int, int, int, int]] = {}
+        if args.free_color is not None: special_segment_color_overrides[winflame.SpecialSegment.UNUSED_DRIVE_SPACE] = args.free_color
+        if args.unaccounted_color is not None: special_segment_color_overrides[winflame.SpecialSegment.UNACCOUNTED_DRIVE_SPACE] = args.unaccounted_color
+        if args.extra_counted_color is not None: special_segment_color_overrides[winflame.SpecialSegment.EXTRA_COUNTED_DRIVE_SPACE] = args.extra_counted_color
+
         # Create flame graph
         loading_message('Creating flame graph...')
         # noinspection PyUnboundLocalVariable
@@ -993,8 +1020,6 @@ Special segments:
             max_depth = args.max_flame_depth,
             width = args.width,
             layer_height = args.layer_height,
-            background_color = args.bg_color,
-            foreground_color = args.fg_color,
             label_visibility = winflame.LabelVisibility(args.labels),
             min_label_width = args.min_label_width,
             hide_full_root_path = args.hide_full_root_path,
@@ -1002,6 +1027,11 @@ Special segments:
             show_drive_free_space = args.special in ('unaccounted-free', 'all'),
             show_drive_unaccounted_space = args.special in ('unaccounted', 'unaccounted-free', 'all'),
             show_drive_extra_counted_space = args.special == 'all',
+            background_color = args.bg_color,
+            border_color = args.border_color,
+            label_color = args.label_color,
+            file_type_colors = file_type_color_overrides,
+            special_segment_colors = special_segment_color_overrides,
         )
 
         # Save or preview flame graph
