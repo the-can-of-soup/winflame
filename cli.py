@@ -399,7 +399,7 @@ class SpacedOutErrorArgumentParser(argparse.ArgumentParser):
         self.print_usage()
         print('')
         print(f'{self.prog}: error: {message}')
-        sys.exit(2)
+        self.exit(2)
 
 
 
@@ -596,7 +596,7 @@ Special segments:
     miscellaneous_options.add_argument('-s', '--silent', action='store_true',
         help='Suppress all output except errors and warnings.')
     miscellaneous_options.add_argument('-n', '--no-warnings', action='store_true',
-        help='Suppress all warnings.')
+        help='Suppress all warnings including yes/no prompts, which will assume the answer "yes".')
 
 
     args: argparse.Namespace = parser.parse_args(args)
@@ -867,9 +867,15 @@ Special segments:
         else:
             file_tree_path = args.tree_out
 
-        # Ensure path isn't reserved
+        # Ensure output path isn't reserved
         if os.path.isreserved(file_tree_path):
             exit_with_error(parser, f'Cannot export file tree to reserved path {file_tree_path!r}. Does it contain a reserved character?')
+
+        # Ensure output path isn't occupied or we are fine with overwriting
+        if os.path.exists(file_tree_path):
+            should_overwrite: bool = warning_message(f'The path {os.path.relpath(file_tree_path)!r} already exists! Overwrite it?', ask_yes_no=True)
+            if not should_overwrite:
+                parser.exit()
 
         # Export
         loading_message('Exporting file tree...')
@@ -898,6 +904,12 @@ Special segments:
         # Ensure output path isn't reserved
         if flame_graph_path is not None and os.path.isreserved(flame_graph_path):
             exit_with_error(parser, f'Cannot write flame graph to reserved path {flame_graph_path!r}. Does it contain a reserved character?')
+
+        # Ensure output path isn't occupied or we are fine with overwriting
+        if os.path.exists(flame_graph_path):
+            should_overwrite: bool = warning_message(f'The path {os.path.relpath(flame_graph_path)!r} already exists! Overwrite it?', ask_yes_no=True)
+            if not should_overwrite:
+                parser.exit()
 
         # Locate flame graph root node by gradually moving it down the tree as needed
         flame_root: winflame.FileNode = file_tree_root
