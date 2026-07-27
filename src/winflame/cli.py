@@ -611,7 +611,7 @@ Special segments:
     except argparse.ArgumentError as parse_error:
         parser.print_usage()
         print('')
-        return error_message(parse_error.message, 2)
+        return error_message(parse_error.message.capitalize(), 2)
 
 
     # Miscellaneous options
