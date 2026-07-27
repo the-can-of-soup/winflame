@@ -7,7 +7,7 @@ Common globals for WinFlame.
 # CONSTANTS
 
 PROGRAM_NAME: str = 'winflame'
-PROGRAM_VERSION: str = '1.0.3'
+PROGRAM_VERSION: str = '1.0.4'
 PROGRAM_DESCRIPTION: str = 'Create flame graphs to visualize file storage space.'
 
 
