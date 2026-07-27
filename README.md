@@ -1,6 +1,6 @@
 # WinFlame
 
-Create flame graphs to visualize file storage space.
+Command-line utility for generating flame graphs from file trees on Windows.
 
 These can be useful for simultaneously identifying which files and folders are taking up the most storage on your system. For privacy reasons I do not have any example graphs of a full drive scan on this page, but that is a good use for this program.
 
@@ -28,9 +28,7 @@ Output:\
 
 ### Dependencies
 
-> [!NOTE]
-> 
-> You don't need to worry about installing these if you're following the installation instructions below.
+You don't need to worry about installing these if you're following the installation instructions below.
 
 - [pywin32](https://pypi.org/project/pywin32/)
 - [pillow](https://pypi.org/project/pillow/)
@@ -216,9 +214,8 @@ Miscellaneous options:
 
 WinFlame provides access to its interfaces via the `winflame` import package. While the module is not the primary purpose of this project, all of its interfaces have informative docstrings.
 
-> [!TIP]
-> 
-> When using Python's built-in `help` function, use `help(winflame.winflame)` rather than just `help(winflame)` for documentation on the core module (which is what supplies the majority of the interfaces of `winflame`).
+
+When using Python's built-in `help` function, use `help(winflame.winflame)` rather than just `help(winflame)` for documentation on the core module (which is what supplies the majority of the interfaces of `winflame`).
 
 Example usage:
 
