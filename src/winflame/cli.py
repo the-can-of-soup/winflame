@@ -916,7 +916,7 @@ Cache:          {CACHE_DIR}
             exit_with_error(parser, f'Cannot write flame graph to reserved path {flame_graph_path!r}. Does it contain a reserved character?')
 
         # Ensure output path isn't occupied or we are fine with overwriting
-        if os.path.exists(flame_graph_path):
+        if flame_graph_path is not None and os.path.exists(flame_graph_path):
             should_overwrite: bool = warning_message(f'The path {os.path.normpath(flame_graph_path)!r} already exists! Overwrite it?', ask_yes_no=True)
             if not should_overwrite:
                 parser.exit()
