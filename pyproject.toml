@@ -68,9 +68,3 @@ issues = "https://github.com/the-can-of-soup/winflame/issues"
 [project.scripts]
 
 winflame = "winflame.cli:cli"
-
-
-# `pipx run` configuration
-[project.entry-points."pipx.run"]
-
-winflame = "winflame.cli:cli"
