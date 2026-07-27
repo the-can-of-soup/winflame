@@ -8,15 +8,15 @@ These can be useful for simultaneously identifying which files and folders are t
 
 ## Showcase
 
-![Example flame graph with red-orange, orange, and yellow blocks on a transparent background](docs/assets/example.png)\
+![Example flame graph with red-orange, orange, and yellow blocks on a transparent background](https://github.com/the-can-of-soup/winflame/blob/main/docs/assets/example.png?raw=true)\
 _In this example, the red-orange blocks are directories, the orange blocks are files, and the yellow blocks are alternate data streams. The width of the blocks is proportional to their size on disk._
 
 This example was generated with the command `winflame -b example -FPw 1000 -H 30 -G 20 -B #0000 -0 #f64f -1 #fa4f -2 #ff4f`,
-after generating the `example` folder using [a script](scripts/generate_example.py). However, if you don't care about customization, a command as
+after generating the `example` folder using [a script](https://github.com/the-can-of-soup/winflame/blob/main/scripts/generate_example.py). However, if you don't care about customization, a command as
 simple as `winflame -b example -PFw 1000` would do.
 
 Output:\
-![Example flame graph with orange, green, and magenta blocks on a white background](docs/assets/example_default_style.png)
+![Example flame graph with orange, green, and magenta blocks on a white background](https://github.com/the-can-of-soup/winflame/blob/main/docs/assets/example_default_style.png?raw=true)
 
 
 
