@@ -444,6 +444,12 @@ def cli(args: list[str] | None = None) -> None:
     )
 
 
+    # IMPORTANT:
+    #
+    # When modifying these arguments, don't forget to run `winflame --help` and update the "Command-Line Usage" section
+    # of README.md with the result!
+
+
     input_options_parent = parser.add_argument_group('Input options',
         description='Use one of these options to choose how to obtain a file tree.')
     input_options = input_options_parent.add_mutually_exclusive_group()

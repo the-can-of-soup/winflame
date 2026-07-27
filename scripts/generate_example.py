@@ -36,7 +36,7 @@ LIPSUM: str = ('Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do 
     + ' laborum.')
 
 # Relative to directory containing this file
-EXAMPLE_DIR: str = 'example'
+EXAMPLE_DIR: str = '../example'
 
 
 
