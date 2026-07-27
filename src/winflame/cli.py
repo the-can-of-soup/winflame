@@ -18,6 +18,7 @@ import argparse
 import hashlib
 import pickle
 import time
+import math
 import sys
 import os
 
@@ -303,13 +304,13 @@ def int_in_range(min_value: int | None = None, max_value: int | None = None) -> 
         nonlocal min_value
         nonlocal max_value
 
-        # Convert to `int`
+        # Convert to int
         try:
             int_: int = int(value)
         except ValueError:
             raise argparse.ArgumentTypeError(f'Invalid integer: {value!r}') from None
 
-        # Ensure in-bounds
+        # Ensure int is in-bounds
         if min_value is not None and int_ < min_value:
             max_value_notation: int | str = '\u221e' if max_value is None else max_value
             raise argparse.ArgumentTypeError(f'Value {int_} is outside the allowed range [{min_value}, {max_value_notation}]')
@@ -318,6 +319,61 @@ def int_in_range(min_value: int | None = None, max_value: int | None = None) -> 
             raise argparse.ArgumentTypeError(f'Value {int_} is outside the allowed range [{min_value_notation}, {max_value}]')
 
         return int_
+
+    return convert
+
+def float_in_range(
+        min_value: float | None = None,
+        max_value: float | None = None,
+        infinite_ok: bool = False,
+        nan_ok: bool = False
+    ) -> Callable[[Any], float]:
+    """
+    Factory function that produces a callable that converts values into ``float`` instances, but raises
+    ``argparse.ArgumentTypeError`` if the resulting ``float`` would be outside a specified range, or if the input value
+    cannot be converted.
+
+    :param min_value: The minimum allowed return value of the callable, or ``None`` for no lower bound.
+    :type min_value: float | None
+    :param max_value: The maximum allowed return value of the callable, or ``None`` for no upper bound.
+    :type max_value: float | None
+    :param infinite_ok: If ``True``, ``inf`` and ``-inf`` are accepted unless they are out of bounds.
+    :type infinite_ok: bool
+    :param nan_ok: If ``True``, ``nan`` is accepted.
+    :type nan_ok: bool
+    :return: A callable that converts values into ``float`` instances, or raises ``argparse.ArgumentTypeError`` if they
+        are out of bounds or cannot be converted.
+    :rtype: Callable[[Any], float]
+    """
+    def convert(value: Any) -> float:
+        nonlocal min_value
+        nonlocal max_value
+        nonlocal infinite_ok
+        nonlocal nan_ok
+
+        # Convert to float
+        try:
+            float_: float = float(value)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f'Invalid float: {value!r}') from None
+
+        # Ensure float is not `nan` (unless allowed)
+        if not nan_ok and math.isnan(float_):
+            raise argparse.ArgumentTypeError(f'nan is not allowed here')
+
+        # Ensure float is finite (unless infinite values are allowed)
+        if not infinite_ok and math.isinf(float_):
+            raise argparse.ArgumentTypeError(f'Infinite values are not allowed here')
+
+        # Ensure float is in-bounds
+        if min_value is not None and float_ < min_value:
+            max_value_notation: int | str = '\u221e' if max_value is None else max_value
+            raise argparse.ArgumentTypeError(f'Value {float_} is outside the allowed range [{min_value}, {max_value_notation}]')
+        if max_value is not None and float_ > max_value:
+            min_value_notation: int | str = '-\u221e' if min_value is None else min_value
+            raise argparse.ArgumentTypeError(f'Value {float_} is outside the allowed range [{min_value_notation}, {max_value}]')
+
+        return float_
 
     return convert
 
@@ -533,9 +589,9 @@ Allowed values:
         help='Font file to use for labels. Accepts TTF, OTF, PCF, BDF, and PIL font files. If omitted, a default font'
             + ' is used.')
     # In the below help text, the "%" symbol is doubled to escape it because argument help texts are formatted strings.
-    flame_graph_options.add_argument('-G', '--font-size', type=int_in_range(1, None), # -G to match -g for --font-file
-        help='Font size to use for labels in pixels. This only has an effect if a TTF or OTF font file is used. If'
-            + ' omitted, 60%% of the value of -H is used, with a cap of 10.')
+    flame_graph_options.add_argument('-G', '--font-size', type=float_in_range(1.0, None), # -G to match -g for --font-file
+        help='Font size to use for labels in pixels (may be fractional). This only has an effect if a TTF or OTF font'
+            + ' file is used. If omitted, 60%% of the value of -H is used, with a cap of 10.')
 
     flame_graph_options.add_argument('-S', '--special', choices=['none', 'unaccounted', 'unaccounted-free', 'all'], default='all',
         help='''Visibility of special segments. (Default: 'all')
@@ -1126,6 +1182,7 @@ __all__ = [
     'warning_message',
     'error_message',
     'int_in_range',
+    'float_in_range',
     'hex_color',
     'hex_color_rgb',
     'hex_color_rgba',
