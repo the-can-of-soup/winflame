@@ -311,12 +311,14 @@ def int_in_range(min_value: int | None = None, max_value: int | None = None) -> 
             raise argparse.ArgumentTypeError(f'Invalid integer: {value!r}') from None
 
         # Ensure int is in-bounds
+        #
+        # '\u221e' is the infinity symbol
         if min_value is not None and int_ < min_value:
-            max_value_notation: int | str = '\u221e' if max_value is None else max_value
-            raise argparse.ArgumentTypeError(f'Value {int_} is outside the allowed range [{min_value}, {max_value_notation}]')
+            max_value_part: str = '\u221e)' if max_value is None else f'{max_value}]'
+            raise argparse.ArgumentTypeError(f'Value {int_} is outside the allowed range [{min_value}, {max_value_part}')
         if max_value is not None and int_ > max_value:
-            min_value_notation: int | str = '-\u221e' if min_value is None else min_value
-            raise argparse.ArgumentTypeError(f'Value {int_} is outside the allowed range [{min_value_notation}, {max_value}]')
+            min_value_part: str = '(-\u221e' if min_value is None else f'[{min_value}'
+            raise argparse.ArgumentTypeError(f'Value {int_} is outside the allowed range {min_value_part}, {max_value}]')
 
         return int_
 
@@ -361,17 +363,24 @@ def float_in_range(
         if not nan_ok and math.isnan(float_):
             raise argparse.ArgumentTypeError(f'nan is not allowed here')
 
-        # Ensure float is finite (unless infinite values are allowed)
-        if not infinite_ok and math.isinf(float_):
-            raise argparse.ArgumentTypeError(f'Infinite values are not allowed here')
-
         # Ensure float is in-bounds
-        if min_value is not None and float_ < min_value:
-            max_value_notation: int | str = '\u221e' if max_value is None else max_value
-            raise argparse.ArgumentTypeError(f'Value {float_} is outside the allowed range [{min_value}, {max_value_notation}]')
-        if max_value is not None and float_ > max_value:
-            min_value_notation: int | str = '-\u221e' if min_value is None else min_value
-            raise argparse.ArgumentTypeError(f'Value {float_} is outside the allowed range [{min_value_notation}, {max_value}]')
+        if (not infinite_ok and math.isinf(float_)) \
+            or (min_value is not None and float_ < min_value) \
+            or (max_value is not None and float_ > max_value):
+
+            # Format min and max values ('\u221e' is the infinity symbol)
+            max_value_formatted: str = '\u221e' if max_value is None else str(max_value)
+            min_value_formatted: str = '-\u221e' if min_value is None else str(min_value) # '\u221e' is the infinity symbol
+
+            # Choose bracket symbols
+            min_bracket: str = '(' if min_value is None and not infinite_ok else '['
+            max_bracket: str = ')' if max_value is None and not infinite_ok else ']'
+
+            # Format interval
+            interval_formatted: str = f'{min_bracket}{min_value_formatted}, {max_value_formatted}{max_bracket}'
+
+            # Raise exception
+            raise argparse.ArgumentTypeError(f'Value {float_} is outside the allowed range {interval_formatted}')
 
         return float_
 
