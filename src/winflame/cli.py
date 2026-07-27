@@ -630,10 +630,8 @@ Special segments:
             exit_with_error(parser, 'Cannot show version information with --silent.')
 
         # Print version information and exit
-        python_revision: str = platform.python_revision()
-        generic_message(f'{common.PROGRAM_NAME} {common.PROGRAM_VERSION} running on {platform.platform()} with'
-            + f' {platform.python_implementation()} {platform.python_version()}'
-            + (f' (revision {python_revision})' if python_revision != '' else ''))
+        generic_message(f'{common.PROGRAM_NAME} {common.PROGRAM_VERSION} running on {platform.platform(terse=True)}'
+            + f' with {platform.python_implementation()} {platform.python_version()}')
         parser.exit()
 
     # Data directory paths
