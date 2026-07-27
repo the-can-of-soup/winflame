@@ -2,7 +2,7 @@
 
 [![PyPI Version](https://img.shields.io/pypi/v/winflame?style=for-the-badge&logo=pypi&logoColor=fff)](https://pypi.org/project/winflame) [![GitHub Repo stars](https://img.shields.io/github/stars/the-can-of-soup/winflame?style=for-the-badge&logo=github&color=e3b341&label=GitHub)](https://github.com/the-can-of-soup/winflame)
 
-A command-line utility for generating flame graphs from file trees on Windows.
+A command-line utility for generating flame graphs of file trees on Windows.
 
 These can be useful for simultaneously identifying which files and folders are taking up the most storage on your system. For privacy reasons I do not have any example graphs of a full drive scan on this page, but that is a good use for this program.
 

@@ -1,5 +1,5 @@
 """
-Core module of the WinFlame command-line utility for generating flame graphs from file trees on Windows.
+Core module of the WinFlame command-line utility for generating flame graphs of file trees on Windows.
 """
 
 # `pywin32` documentation: https://mhammond.github.io/pywin32/

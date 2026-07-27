@@ -1,5 +1,5 @@
 """
-Command-line utility for generating flame graphs from file trees on Windows.
+Command-line utility for generating flame graphs of file trees on Windows.
 """
 
 
