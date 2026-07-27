@@ -62,6 +62,8 @@ Upon installation, the `winflame` command will become available on your system:
 winflame 1.0.3 running on Windows-11 with CPython 3.13.2
 ```
 
+It can also be called with `py -m winflame`. This can be used e.g. if the `winflame` command is not on PATH for whatever reason.
+
 To view the usage reference, run `winflame --help`:
 
 ```
