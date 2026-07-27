@@ -1,6 +1,8 @@
 # WinFlame
 
-Command-line utility for generating flame graphs from file trees on Windows.
+[![PyPI Version](https://img.shields.io/pypi/v/winflame?style=for-the-badge&logo=pypi&logoColor=fff)](https://pypi.org/project/winflame) [![GitHub Repo stars](https://img.shields.io/github/stars/the-can-of-soup/winflame?style=for-the-badge&logo=github&color=e3b341&label=GitHub)](https://github.com/the-can-of-soup/winflame)
+
+A command-line utility for generating flame graphs from file trees on Windows.
 
 These can be useful for simultaneously identifying which files and folders are taking up the most storage on your system. For privacy reasons I do not have any example graphs of a full drive scan on this page, but that is a good use for this program.
 
@@ -12,10 +14,10 @@ These can be useful for simultaneously identifying which files and folders are t
 _In this example, the red-orange blocks are directories, the orange blocks are files, and the yellow blocks are alternate data streams. The width of the blocks is proportional to their size on disk._
 
 This example was generated with the command `winflame -b example -FPw 1000 -H 30 -G 20 -m 16 -B #0000 -0 #f64f -1 #fa4f -2 #ff4f`,
-after generating the `example` folder using [a script](https://github.com/the-can-of-soup/winflame/blob/main/scripts/generate_example.py). However, if you don't care about customization, a command as
-simple as `winflame -b example -PFw 1000` would do.
+after generating the `example` folder using [a script](https://github.com/the-can-of-soup/winflame/blob/main/scripts/generate_example.py).
 
-Output:\
+However, if you don't care about customization, a command as
+simple as `winflame -b example -PFw 1000` would do:\
 ![Example flame graph with orange, green, and magenta blocks on a white background](https://github.com/the-can-of-soup/winflame/blob/main/docs/assets/example_default_style.png?raw=true)
 
 
