@@ -688,12 +688,16 @@ Cache:          {CACHE_DIR}
         sys.stdout.flush()
         parser.exit()
 
-    # Clear cache
+    # Delete cached file tree
     if args.delete_cache:
         if os.path.exists(CACHED_FILE_TREE_PATH):
+            # Get cached file tree size
+            cached_file_tree_size: int = os.path.getsize(CACHED_FILE_TREE_PATH)
+
+            # Delete cached file tree
             loading_message('Deleting cached file tree...')
             os.remove(CACHED_FILE_TREE_PATH)
-            success_message('Deleted cached file tree.')
+            success_message(f'Deleted cached file tree ({winflame.format_data_size(cached_file_tree_size)}).')
         else:
             success_message('There is no cached file tree.')
 
@@ -1065,7 +1069,7 @@ Cache:          {CACHE_DIR}
             flame_graph_size: int = os.path.getsize(flame_graph_path)
             success_message(f'Wrote flame graph to {os.path.normpath(flame_graph_path)!r} ({winflame.format_data_size(flame_graph_size)}).')
 
-            # Open in default image program if flag is enabled
+            # Open in default image program if the open flag is enabled
             if args.open_flame:
                 os.startfile(flame_graph_path)
         else:
