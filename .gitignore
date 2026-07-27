@@ -1,7 +1,5 @@
 .idea/
+
+dist/
 test/
 example/
-
-output/
-cache/
-.tree_file_hashes

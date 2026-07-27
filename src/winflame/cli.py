@@ -21,20 +21,27 @@ import time
 import sys
 import os
 
-import winflame
-import common
+from . import winflame
+from . import common
 
 
 
 # CONSTANTS
 
-# Relative to program directory
-CACHE_DIR: str = 'cache'
-OUTPUT_DIR: str = 'output'
-TREE_FILE_HASHES_FILENAME: str = '.tree_file_hashes'
+# Directory path constants must not contain path traversals, as that "confuses" `os.makedirs` (according to its
+# documentation).
 
-# Relative to cache directory
-CACHED_FILE_TREE_FILENAME: str = 'file_tree.wftree'
+# Main data directories
+DATA_DIR: str = os.path.abspath(os.path.join(os.getenv('APPDATA'), 'winflame'))
+LOCAL_DATA_DIR: str = os.path.abspath(os.path.join(os.getenv('LOCALAPPDATA'), 'winflame'))
+
+# Output
+OUTPUT_DIR: str = os.path.join(DATA_DIR, 'output')
+TREE_FILE_HASHES_PATH: str = os.path.join(DATA_DIR, '.tree_file_hashes')
+
+# Cache
+CACHE_DIR: str = os.path.join(LOCAL_DATA_DIR, 'cache')
+CACHED_FILE_TREE_PATH: str = os.path.join(CACHE_DIR, 'file_tree.wftree')
 
 # Relative to output directory, in `strftime` format
 DEFAULT_FLAME_GRAPH_FILENAME_FORMAT: str = 'flame_graph_%H-%M-%S_%m-%d-%Y.png'
@@ -66,6 +73,7 @@ COLOR_KEY: list[tuple[str, tuple[int, int, int]] | None] = [ # Each list element
 
 # GLOBALS
 
+# Output suppression
 silent_mode: bool = False # Suppresses all output except errors and warnings
 suppress_warnings: bool = False
 
@@ -191,7 +199,7 @@ def generic_message(
         output = '\033[0K' + output
 
     if ask_yes_no:
-        response: str = input(output + ' [y/n] \033[0m').strip().lower()
+        response: str = input(output + ' [y/N] \033[0m').strip().lower()
         return response in ('y', 'yes')
     else:
         sys.stdout.write(output)
@@ -416,16 +424,13 @@ def cli(args: list[str] | None = None) -> None:
     global silent_mode
     global suppress_warnings
 
+    # Create main data directories
+    os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(LOCAL_DATA_DIR, exist_ok=True)
 
-    # Compute paths
-
-    program_dir: str = os.path.dirname(os.path.abspath(__file__))
-    tree_file_hashes_path: str = os.path.join(program_dir, TREE_FILE_HASHES_FILENAME)
-
-    cache_dir: str = os.path.join(program_dir, CACHE_DIR)
-    cached_file_tree_path: str = os.path.join(cache_dir, CACHED_FILE_TREE_FILENAME)
-
-    output_dir: str = os.path.join(program_dir, OUTPUT_DIR)
+    # Create other data directories
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(CACHE_DIR, exist_ok=True)
 
 
     # Argument parsing
@@ -588,6 +593,8 @@ Special segments:
         help='Print this help text and exit.')
     miscellaneous_action_options.add_argument('-v', '--version', action='store_true',
         help='Print program version information and exit.')
+    miscellaneous_action_options.add_argument('-q', '--paths', action='store_true', # -q because I ran out of letters
+        help='Print the program\'s data directory paths and exit.')
     miscellaneous_action_options.add_argument('-C', '--colors', action='store_true',
         help='Print the flame graph / progress report default color key and exit.')
     miscellaneous_action_options.add_argument('-d', '--delete-cache', '--clear-cache', action='store_true', # -d for "delete"
@@ -624,9 +631,24 @@ Special segments:
 
         # Print version information and exit
         python_revision: str = platform.python_revision()
-        generic_message(f'{common.PROGRAM_NAME} {common.VERSION} running on {platform.platform()} with'
+        generic_message(f'{common.PROGRAM_NAME} {common.PROGRAM_VERSION} running on {platform.platform()} with'
             + f' {platform.python_implementation()} {platform.python_version()}'
             + (f' (revision {python_revision})' if python_revision != '' else ''))
+        parser.exit()
+
+    # Data directory paths
+    if args.paths:
+        if args.silent:
+            exit_with_error(parser, 'Cannot show data directory paths with --silent.')
+
+        # Print data directory paths and exit
+        print(f'''
+Data:           {DATA_DIR}
+Data (local):   {LOCAL_DATA_DIR}
+
+Default output: {OUTPUT_DIR}
+Cache:          {CACHE_DIR}
+'''.strip())
         parser.exit()
 
     # Color key
@@ -668,9 +690,9 @@ Special segments:
 
     # Clear cache
     if args.delete_cache:
-        if os.path.exists(cached_file_tree_path):
+        if os.path.exists(CACHED_FILE_TREE_PATH):
             loading_message('Deleting cached file tree...')
-            os.remove(cached_file_tree_path)
+            os.remove(CACHED_FILE_TREE_PATH)
             success_message('Deleted cached file tree.')
         else:
             success_message('There is no cached file tree.')
@@ -723,26 +745,26 @@ Special segments:
         # Build a file tree from a target (root) path
 
         # Normalize path
-        normalized_target_path: str = os.path.normpath(args.build_from)
+        normalized_root_path: str = os.path.normpath(args.build_from)
 
         # Ensure path exists
-        if not os.path.exists(normalized_target_path):
-            exit_with_error(parser, f'Failed to build file tree from {normalized_target_path!r}; target path does not exist.')
+        if not os.path.exists(normalized_root_path):
+            exit_with_error(parser, f'Failed to build file tree from {normalized_root_path!r}; target path does not exist.')
 
         # Absolutize path and ensure ":$DATA" suffix if it is an alternate data stream
-        root_path: str = os.path.abspath(normalized_target_path)
-        filename: str = os.path.basename(root_path)
+        absolute_root_path: str = os.path.abspath(normalized_root_path)
+        filename: str = os.path.basename(absolute_root_path)
         filename_colon_count: int = filename.count(':')
         if filename_colon_count == 1:
             # Add ":$DATA" suffix
             filename += ':$DATA'
-            root_path = os.path.join(os.path.dirname(root_path), filename)
+            absolute_root_path = os.path.join(os.path.dirname(absolute_root_path), filename)
         elif filename_colon_count > 1:
             if filename_colon_count != 2 or not filename.endswith(':$DATA'):
-                exit_with_error(parser, f'Failed to build file tree from {normalized_target_path!r}; invalid alternate data stream syntax.')
+                exit_with_error(parser, f'Failed to build file tree from {normalized_root_path!r}; invalid alternate data stream syntax.')
 
         # Show warning and ask for confirmation if building from a drive root without elevated privileges
-        canonical_root_path: str = os.path.realpath(root_path, strict=True)
+        canonical_root_path: str = os.path.realpath(absolute_root_path, strict=True)
         drive_letter: str; path_on_drive: str
         drive_letter, path_on_drive = os.path.splitdrive(canonical_root_path)
         is_drive_root: bool = drive_letter != '' and path_on_drive == os.path.sep
@@ -756,42 +778,42 @@ Special segments:
         # Build file tree
         loading_message('Building file tree...')
         file_tree_root = winflame.FileNode(
-            root_path,
-            is_ads = root_path.endswith(':$DATA'),
+            absolute_root_path,
+            is_ads = absolute_root_path.endswith(':$DATA'),
             should_report_progress = not (args.no_progress_report or args.silent),
         )
-        success_message(f'Built file tree from {root_path!r}.')
+        success_message(f'Built file tree from {absolute_root_path!r}.')
 
     elif input_mode_tree_file:
         # Load a file tree from a file
 
         # Normalize path
-        tree_file_path: str = os.path.normpath(args.tree_in)
+        normalized_tree_file_path: str = os.path.normpath(args.tree_in)
 
         # Ensure path exists and is a file
-        if not os.path.isfile(tree_file_path):
-            exit_with_error(parser, f'Failed to load file tree {tree_file_path!r}; file does not exist.')
+        if not os.path.isfile(normalized_tree_file_path):
+            exit_with_error(parser, f'Failed to load file tree {normalized_tree_file_path!r}; file does not exist.')
 
         # Verify and load file tree
         loading_message('Loading file tree...')
-        load_result: winflame.FileNode | None = load_file_tree(tree_file_path, tree_file_hashes_path)
+        load_result: winflame.FileNode | None = load_file_tree(normalized_tree_file_path, TREE_FILE_HASHES_PATH)
         if load_result is None:
-            exit_with_error(parser, f'Failed to load file tree {tree_file_path!r}; file did not match any known hashes. Was it created by this program installation?')
+            exit_with_error(parser, f'Failed to load file tree {normalized_tree_file_path!r}; file did not match any known hashes. Was it created by this program installation?')
 
         # Use tree if it was verified as safe
         file_tree_root = load_result
-        success_message(f'Loaded file tree from {tree_file_path!r}.')
+        success_message(f'Loaded file tree from {normalized_tree_file_path!r}.')
 
     elif input_mode_reuse_tree:
         # Load cached file tree
 
         # Ensure cached file tree exists
-        if not os.path.isfile(cached_file_tree_path):
+        if not os.path.isfile(CACHED_FILE_TREE_PATH):
             exit_with_error(parser, 'There is no cached file tree.')
 
         # Verify and load cached file tree
         loading_message('Loading cached file tree...')
-        load_result: winflame.FileNode | None = load_file_tree(cached_file_tree_path, tree_file_hashes_path)
+        load_result: winflame.FileNode | None = load_file_tree(CACHED_FILE_TREE_PATH, TREE_FILE_HASHES_PATH)
         if load_result is None:
             exit_with_error(parser, 'The cached file tree did not match any known hashes.')
 
@@ -841,14 +863,10 @@ Special segments:
     if output_mode_cache_tree:
         # Save file tree to the cache
 
-        # Create cache folder if it doesn't exist
-        if not os.path.exists(cache_dir):
-            os.mkdir(cache_dir)
-
         # Save to cache
         loading_message('Caching file tree...')
-        save_file_tree(file_tree_root, cached_file_tree_path, tree_file_hashes_path)
-        cached_file_tree_size: int = os.path.getsize(cached_file_tree_path)
+        save_file_tree(file_tree_root, CACHED_FILE_TREE_PATH, TREE_FILE_HASHES_PATH)
+        cached_file_tree_size: int = os.path.getsize(CACHED_FILE_TREE_PATH)
         success_message(f'Cached file tree ({winflame.format_data_size(cached_file_tree_size)}).')
 
     if output_mode_tree_file:
@@ -859,11 +877,7 @@ Special segments:
         if args.tree_out_default:
             # Generate default filename from current time
             file_tree_filename: str = time.strftime(DEFAULT_FILE_TREE_FILENAME_FORMAT)
-            file_tree_path = os.path.join(output_dir, file_tree_filename)
-
-            # Create output folder if it doesn't exist
-            if not os.path.exists(output_dir):
-                os.mkdir(output_dir)
+            file_tree_path = os.path.join(OUTPUT_DIR, file_tree_filename)
         else:
             file_tree_path = args.tree_out
 
@@ -873,15 +887,15 @@ Special segments:
 
         # Ensure output path isn't occupied or we are fine with overwriting
         if os.path.exists(file_tree_path):
-            should_overwrite: bool = warning_message(f'The path {os.path.relpath(file_tree_path)!r} already exists! Overwrite it?', ask_yes_no=True)
+            should_overwrite: bool = warning_message(f'The path {os.path.normpath(file_tree_path)!r} already exists! Overwrite it?', ask_yes_no=True)
             if not should_overwrite:
                 parser.exit()
 
         # Export
         loading_message('Exporting file tree...')
-        save_file_tree(file_tree_root, file_tree_path, tree_file_hashes_path)
+        save_file_tree(file_tree_root, file_tree_path, TREE_FILE_HASHES_PATH)
         exported_file_tree_size: int = os.path.getsize(file_tree_path)
-        success_message(f'Wrote file tree to {os.path.relpath(file_tree_path)!r} ({winflame.format_data_size(exported_file_tree_size)}).')
+        success_message(f'Wrote file tree to {os.path.normpath(file_tree_path)!r} ({winflame.format_data_size(exported_file_tree_size)}).')
 
     if output_mode_flame:
         # Create a flame graph
@@ -891,11 +905,7 @@ Special segments:
         if args.flame_out_default:
             # Generate default filename from current time
             flame_graph_filename: str = time.strftime(DEFAULT_FLAME_GRAPH_FILENAME_FORMAT)
-            flame_graph_path = os.path.join(output_dir, flame_graph_filename)
-
-            # Create output folder if it doesn't exist
-            if not os.path.exists(output_dir):
-                os.mkdir(output_dir)
+            flame_graph_path = os.path.join(OUTPUT_DIR, flame_graph_filename)
         elif args.preview_flame:
             flame_graph_path = None
         else:
@@ -907,7 +917,7 @@ Special segments:
 
         # Ensure output path isn't occupied or we are fine with overwriting
         if os.path.exists(flame_graph_path):
-            should_overwrite: bool = warning_message(f'The path {os.path.relpath(flame_graph_path)!r} already exists! Overwrite it?', ask_yes_no=True)
+            should_overwrite: bool = warning_message(f'The path {os.path.normpath(flame_graph_path)!r} already exists! Overwrite it?', ask_yes_no=True)
             if not should_overwrite:
                 parser.exit()
 
@@ -963,7 +973,7 @@ Special segments:
                         # Case-insensitive check
                         flame_root = children_lower[path_segment.lower()]
                     else:
-                        exit_with_error(parser, f'Couldn\'t find flame root {args.flame_root!r} on file tree (first missing path segment is {path_segment!r}).')
+                        exit_with_error(parser, f'Couldn\'t find flame root {normalized_flame_root_path!r} on file tree (first missing path segment is {path_segment!r}).')
 
                 # Finish handling alternate data stream
                 if stream_suffix is not None:
@@ -979,7 +989,7 @@ Special segments:
                         # Case-insensitive check
                         flame_root = children_lower[stream_suffix.lower()]
                     else:
-                        exit_with_error(parser, f'Couldn\'t find flame root {args.flame_root!r} on file tree (couldn\'t find alternate data stream {stream_suffix!r} on file {path_segment!r}).')
+                        exit_with_error(parser, f'Couldn\'t find flame root {normalized_flame_root_path!r} on file tree (couldn\'t find alternate data stream {stream_suffix!r} of file {path_segment!r}).')
 
         # Compute font size for labels
         font_size: float
@@ -997,7 +1007,7 @@ Special segments:
         else:
             # Ensure file exists
             if not os.path.isfile(args.font_file):
-                exit_with_error(parser, f'Failed to load font {args.font_file!r}; file does not exist.')
+                exit_with_error(parser, f'Failed to load font {os.path.normpath(args.font_file)!r}; file does not exist.')
 
             # Get file extension
             font_file_extension: str = os.path.splitext(args.font_file)[1].lower()
@@ -1052,7 +1062,8 @@ Special segments:
             # Write to file
             loading_message('Saving flame graph...')
             flame_graph.save(flame_graph_path)
-            success_message(f'Wrote flame graph to {os.path.relpath(flame_graph_path)!r}.')
+            flame_graph_size: int = os.path.getsize(flame_graph_path)
+            success_message(f'Wrote flame graph to {os.path.normpath(flame_graph_path)!r} ({winflame.format_data_size(flame_graph_size)}).')
 
             # Open in default image program if flag is enabled
             if args.open_flame:
@@ -1073,3 +1084,44 @@ Special segments:
 
 if __name__ == '__main__':
     cli()
+
+
+
+# EXPORTS
+
+__all__ = [
+    'DATA_DIR',
+    'LOCAL_DATA_DIR',
+
+    'OUTPUT_DIR',
+    'TREE_FILE_HASHES_PATH',
+
+    'CACHE_DIR',
+    'CACHED_FILE_TREE_PATH',
+
+    'DEFAULT_FLAME_GRAPH_FILENAME_FORMAT',
+    'DEFAULT_FILE_TREE_FILENAME_FORMAT',
+
+    'SUCCESS_COLOR',
+    'WARNING_COLOR',
+    'ERROR_COLOR',
+
+    'COLOR_KEY',
+
+    'load_file_tree',
+    'save_file_tree',
+    'generic_message',
+    'loading_message',
+    'success_message',
+    'warning_message',
+    'exit_with_error',
+    'int_in_range',
+    'hex_color',
+    'hex_color_rgb',
+    'hex_color_rgba',
+
+    'NewlinePreservingHelpFormatter',
+    'SpacedOutErrorArgumentParser',
+
+    'cli',
+]

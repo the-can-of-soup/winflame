@@ -1672,3 +1672,33 @@ SPECIAL_SEGMENT_LABELS: dict[SpecialSegment, str] = {
     SpecialSegment.UNUSED_DRIVE_SPACE: 'Free',
     SpecialSegment.EXTRA_COUNTED_DRIVE_SPACE: 'Extra-counted',
 }
+
+
+
+# EXPORTS
+
+__all__ = [
+    'format_data_size',
+    'truncate',
+
+    'LabelVisibility',
+    'WindowsFileAttributes',
+    'FileType',
+    'SpecialSegment',
+    'FileNode',
+
+    'PROGRESS_REPORT_INTERVAL',
+    'PROGRESS_REPORT_MAX_FILENAME_WIDTH',
+    'PROGRESS_REPORT_OUTER_MAX_VISIBLE_CHILDREN',
+    'PROGRESS_REPORT_WORKING_DEPTH_MAX_VISIBLE_CHILDREN',
+
+    'FILE_TYPE_COLORS',
+
+    'NOT_STARTED_COLOR',
+    'COMPLETED_COLOR',
+    'ERROR_COLOR',
+    'DESCENDANT_ERROR_COLOR',
+
+    'SPECIAL_SEGMENT_COLORS',
+    'SPECIAL_SEGMENT_LABELS',
+]

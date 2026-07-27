@@ -1,21 +1,31 @@
+[build-system]
+
+requires = ["flit_core >=3.11,<4"]
+build-backend = "flit_core.buildapi"
+
+
+# Files to include in source distributions
+[tool.flit.sdist]
+
+# README.md, LICENSE.txt, pyproject.toml, and src/ are automatically included
+include = ["example.png", "example_default_style.png", "example_thin.png", "generate_example.py", "requirements.txt"]
+
+
 [project]
 
-# Some of these fields are mirrored in "common.py"
 name = "winflame"
-version = "1.0.0"
-description = "Create flame graphs to visualize file storage space."
+dynamic = ["version", "description"]
 keywords = ["storage", "file", "space", "tree", "flame", "graph", "distribution", "windows", "command", "command-line",
     "command line", "cli"]
 
 readme = "README.md"
 license = "GPL-3.0-or-later"
-license-files = ["LICENSE\\.txt"]
+license-files = ["LICENSE.txt"]
 
 classifiers = [
     "Development Status :: 5 - Production/Stable",
-    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+#    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)", # License classifiers are deprecated
     "Natural Language :: English",
-
     "Environment :: Console",
     "Operating System :: Microsoft :: Windows",
     "Typing :: Typed",
@@ -26,7 +36,6 @@ classifiers = [
 
     "Intended Audience :: End Users/Desktop",
     "Intended Audience :: System Administrators",
-    "Intended Audience :: Developers",
 
     "Programming Language :: Python",
     "Programming Language :: Python :: Implementation :: CPython",
@@ -39,7 +48,7 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 
-# Dependencies are mirrored in "requirements.txt"
+# Dependencies are mirrored in requirements.txt
 dependencies = [
     "pywin32~=312",
     "pillow~=12.3.0",
@@ -54,12 +63,13 @@ repository = "https://github.com/the-can-of-soup/winflame.git"
 issues = "https://github.com/the-can-of-soup/winflame/issues"
 
 
+# Terminal command configuration
 [project.scripts]
 
-# Terminal command configuration
 winflame = "winflame.cli:cli"
 
-[project.entry-points."pipx.run"]
 
 # `pipx run` configuration
+[project.entry-points."pipx.run"]
+
 winflame = "winflame.cli:cli"

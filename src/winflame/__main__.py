@@ -6,5 +6,11 @@ Command-line utility for generating flame graphs from file trees on Windows.
 
 # IMPORTS
 
-from winflame import *
-import cli
+from . import cli
+
+
+
+# MAIN
+
+if __name__ == '__main__':
+    cli.cli()
