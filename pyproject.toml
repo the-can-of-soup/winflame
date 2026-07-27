@@ -50,7 +50,7 @@ classifiers = [
 
 # Dependencies are mirrored in requirements.txt
 dependencies = [
-    "pywin32 ~= 312",
+    "pywin32 >= 312", # "[The `~=` operator] MUST NOT be used with a single segment version number such as `~=1`." Source: https://packaging.python.org/en/latest/specifications/version-specifiers/#compatible-release
     "pillow ~= 12.3.0",
 ]
 requires-python = ">= 3.10"
