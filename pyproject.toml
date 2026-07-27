@@ -50,8 +50,8 @@ classifiers = [
 
 # Dependencies are mirrored in requirements.txt
 dependencies = [
-    "pywin32~=312",
-    "pillow~=12.3.0",
+    "pywin32 ~= 312",
+    "pillow ~= 12.3.0",
 ]
 requires-python = ">= 3.10"
 
