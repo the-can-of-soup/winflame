@@ -7,7 +7,7 @@ build-backend = "flit_core.buildapi"
 # Files to include in source distributions
 [tool.flit.sdist]
 
-# README.md, LICENSE.txt, pyproject.toml, and src/ are automatically included
+# README.md, LICENSE.txt, pyproject.toml, .gitignore, and src are automatically included
 include = ["example.png", "example_default_style.png", "example_thin.png", "generate_example.py", "requirements.txt"]
 
 
