@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from PIL import Image, ImageFont, PcfFontFile, BdfFontFile
 from collections.abc import Callable
-from typing import Any, NoReturn
 import win32com.shell.shell
+from typing import Any
 import pickletools
 import platform
 import argparse
@@ -256,34 +256,34 @@ def warning_message(message: str, ask_yes_no: bool = False, clear_line: bool = T
     r: int; g: int; b: int
     r, g, b = WARNING_COLOR
     return generic_message(
-        f'\033[38;2;{r};{g};{b}mWarning: {message}' + ('' if ask_yes_no else '\033[0m'),
+        f'\033[38;2;{r};{g};{b}m{common.PROGRAM_NAME}: warning: {message}' + ('' if ask_yes_no else '\033[0m'),
         ask_yes_no=ask_yes_no,
         clear_line=clear_line,
         bypass_silent_mode=True,
     )
 
-def exit_with_error(parser: argparse.ArgumentParser, message: str, status: int = 1, clear_line: bool = True) -> NoReturn:
+def error_message(message: str, status: int = 1, clear_line: bool = True) -> int:
     """
-    Exits the program with an error message.
+    Prints an error message.
 
-    :param parser: The argument parser.
-    :type parser: argparse.ArgumentParser
     :param message: An error message to print.
     :type message: str
-    :param status: The exit status code to exit with.
+    :param status: An exit status to return.
     :type status: int
     :param clear_line: Whether to clear all characters after the cursor on the current line before printing.
     :type clear_line: bool
+    :return: The value of ``status``.
+    :rtype: int
     """
     r: int; g: int; b: int
     r, g, b = ERROR_COLOR
     generic_message(
-        f'\033[38;2;{r};{g};{b}mError: {message}\033[0m',
+        f'\033[38;2;{r};{g};{b}m{common.PROGRAM_NAME}: error: {message}\033[0m',
         clear_line=clear_line,
         bypass_silent_mode=True,
     )
 
-    parser.exit(status)
+    return status
 
 def int_in_range(min_value: int | None = None, max_value: int | None = None) -> Callable[[Any], int]:
     """
@@ -397,29 +397,19 @@ class NewlinePreservingHelpFormatter(argparse.HelpFormatter):
 
         return result_lines
 
-class SpacedOutErrorArgumentParser(argparse.ArgumentParser):
-    """
-    Subclass of ``argparse.ArgumentParser`` that adds a blank line between the usage text and error message when an
-    invalid argument is passed.
-    """
-
-    def error(self, message: str) -> NoReturn:
-        self.print_usage()
-        print('')
-        print(f'{self.prog}: error: {message}')
-        self.exit(2)
-
 
 
 # MAIN
 
-def cli(args: list[str] | None = None) -> None:
+def cli(args: list[str] | None = None) -> int:
     """
     Runs the WinFlame CLI (Command-Line Interface).
 
     :param args: A list of arguments passed to the CLI. If ``None``, the arguments passed to the current program are
         used.
     :type args: list[str] | None
+    :return: The exit status of the CLI.
+    :rtype: int
     """
     global silent_mode
     global suppress_warnings
@@ -433,14 +423,15 @@ def cli(args: list[str] | None = None) -> None:
     os.makedirs(CACHE_DIR, exist_ok=True)
 
 
-    # Argument parsing
+    # Argument parsing configuration
 
-    parser: argparse.ArgumentParser = SpacedOutErrorArgumentParser(
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(
         prog = common.PROGRAM_NAME,
         description = common.PROGRAM_DESCRIPTION,
         add_help = False, # We manually add the help option back later so that we can customize it
         prefix_chars = '-/',
         formatter_class = NewlinePreservingHelpFormatter,
+        exit_on_error = False, # We manually handle parsing errors
     )
 
 
@@ -612,7 +603,14 @@ Special segments:
         help='Suppress all warnings including yes/no prompts, which will assume the answer "yes".')
 
 
-    args: argparse.Namespace = parser.parse_args(args)
+    # Parse arguments
+
+    try:
+        args: argparse.Namespace = parser.parse_args(args)
+    except argparse.ArgumentError as parse_error:
+        parser.print_usage()
+        print('')
+        return error_message(parse_error.message, 2)
 
 
     # Miscellaneous options
@@ -624,26 +622,26 @@ Special segments:
     # Help text
     if args.help:
         if args.silent:
-            exit_with_error(parser, 'Cannot show help with --silent.')
+            return error_message('Cannot show help with --silent.')
 
         # Print help and exit
         parser.print_help()
-        parser.exit()
+        return 0
 
     # Version information
     if args.version:
         if args.silent:
-            exit_with_error(parser, 'Cannot show version information with --silent.')
+            return error_message('Cannot show version information with --silent.')
 
         # Print version information and exit
         generic_message(f'{common.PROGRAM_NAME} {common.PROGRAM_VERSION} running on {platform.platform(terse=True)}'
             + f' with {platform.python_implementation()} {platform.python_version()}')
-        parser.exit()
+        return 0
 
     # Data directory paths
     if args.paths:
         if args.silent:
-            exit_with_error(parser, 'Cannot show data directory paths with --silent.')
+            return error_message('Cannot show data directory paths with --silent.')
 
         # Print data directory paths and exit
         print(f'''
@@ -653,12 +651,12 @@ Data (local):   {LOCAL_DATA_DIR}
 Default output: {OUTPUT_DIR}
 Cache:          {CACHE_DIR}
 '''.strip())
-        parser.exit()
+        return 0
 
     # Color key
     if args.colors:
         if args.silent:
-            exit_with_error(parser, 'Cannot show color key with --silent.')
+            return error_message('Cannot show color key with --silent.')
 
         output: str = ''
 
@@ -690,7 +688,7 @@ Cache:          {CACHE_DIR}
         # Print color key and exit
         sys.stdout.write(output)
         sys.stdout.flush()
-        parser.exit()
+        return 0
 
     # Delete cached file tree
     if args.delete_cache:
@@ -705,7 +703,7 @@ Cache:          {CACHE_DIR}
         else:
             success_message('There is no cached file tree.')
 
-        parser.exit()
+        return 0
 
 
     # Determine I/O modes
@@ -736,13 +734,13 @@ Cache:          {CACHE_DIR}
 
     # Ensure that an input option is present if an output option is present and vice versa
     if output_option_is_present and not input_option_is_present:
-        exit_with_error(parser, 'Output(s) specified but no input provided.')
+        return error_message('Output(s) specified but no input provided.')
     elif input_option_is_present and not output_option_is_present:
-        exit_with_error(parser, 'Input provided but no output(s) specified.')
+        return error_message('Input provided but no output(s) specified.')
 
     # Error if both --info and -silent are passed
     if output_mode_tree_info and args.silent:
-        exit_with_error(parser, 'Cannot show file tree info with --silent.')
+        return error_message('Cannot show file tree info with --silent.')
 
 
     # Obtain file tree
@@ -757,7 +755,7 @@ Cache:          {CACHE_DIR}
 
         # Ensure path exists
         if not os.path.exists(normalized_root_path):
-            exit_with_error(parser, f'Failed to build file tree from {normalized_root_path!r}; target path does not exist.')
+            return error_message(f'Failed to build file tree from {normalized_root_path!r}; target path does not exist.')
 
         # Absolutize path and ensure ":$DATA" suffix if it is an alternate data stream
         absolute_root_path: str = os.path.abspath(normalized_root_path)
@@ -769,7 +767,7 @@ Cache:          {CACHE_DIR}
             absolute_root_path = os.path.join(os.path.dirname(absolute_root_path), filename)
         elif filename_colon_count > 1:
             if filename_colon_count != 2 or not filename.endswith(':$DATA'):
-                exit_with_error(parser, f'Failed to build file tree from {normalized_root_path!r}; invalid alternate data stream syntax.')
+                return error_message(f'Failed to build file tree from {normalized_root_path!r}; invalid alternate data stream syntax.')
 
         # Show warning and ask for confirmation if building from a drive root without elevated privileges
         canonical_root_path: str = os.path.realpath(absolute_root_path, strict=True)
@@ -781,7 +779,7 @@ Cache:          {CACHE_DIR}
                 + ' administrator privileges. Not all information may be available, for example drive capacity and'
                 + ' system file sizes. Continue anyway?', ask_yes_no=True)
             if not should_continue:
-                parser.exit()
+                return 0
 
         # Build file tree
         loading_message('Building file tree...')
@@ -800,13 +798,13 @@ Cache:          {CACHE_DIR}
 
         # Ensure path exists and is a file
         if not os.path.isfile(normalized_tree_file_path):
-            exit_with_error(parser, f'Failed to load file tree {normalized_tree_file_path!r}; file does not exist.')
+            return error_message(f'Failed to load file tree {normalized_tree_file_path!r}; file does not exist.')
 
         # Verify and load file tree
         loading_message('Loading file tree...')
         load_result: winflame.FileNode | None = load_file_tree(normalized_tree_file_path, TREE_FILE_HASHES_PATH)
         if load_result is None:
-            exit_with_error(parser, f'Failed to load file tree {normalized_tree_file_path!r}; file did not match any known hashes. Was it created by this program installation?')
+            return error_message(f'Failed to load file tree {normalized_tree_file_path!r}; file did not match any known hashes. Was it created by this program installation?')
 
         # Use tree if it was verified as safe
         file_tree_root = load_result
@@ -817,13 +815,13 @@ Cache:          {CACHE_DIR}
 
         # Ensure cached file tree exists
         if not os.path.isfile(CACHED_FILE_TREE_PATH):
-            exit_with_error(parser, 'There is no cached file tree.')
+            return error_message('There is no cached file tree.')
 
         # Verify and load cached file tree
         loading_message('Loading cached file tree...')
         load_result: winflame.FileNode | None = load_file_tree(CACHED_FILE_TREE_PATH, TREE_FILE_HASHES_PATH)
         if load_result is None:
-            exit_with_error(parser, 'The cached file tree did not match any known hashes.')
+            return error_message('The cached file tree did not match any known hashes.')
 
         # Use tree if it was verified as safe
         file_tree_root = load_result
@@ -891,13 +889,13 @@ Cache:          {CACHE_DIR}
 
         # Ensure output path isn't reserved
         if os.path.isreserved(file_tree_path):
-            exit_with_error(parser, f'Cannot export file tree to reserved path {file_tree_path!r}. Does it contain a reserved character?')
+            return error_message(f'Cannot export file tree to reserved path {file_tree_path!r}. Does it contain a reserved character?')
 
         # Ensure output path isn't occupied or we are fine with overwriting
         if os.path.exists(file_tree_path):
             should_overwrite: bool = warning_message(f'The path {os.path.normpath(file_tree_path)!r} already exists! Overwrite it?', ask_yes_no=True)
             if not should_overwrite:
-                parser.exit()
+                return 0
 
         # Export
         loading_message('Exporting file tree...')
@@ -921,25 +919,25 @@ Cache:          {CACHE_DIR}
 
         # Ensure output path isn't reserved
         if flame_graph_path is not None and os.path.isreserved(flame_graph_path):
-            exit_with_error(parser, f'Cannot write flame graph to reserved path {flame_graph_path!r}. Does it contain a reserved character?')
+            return error_message(f'Cannot write flame graph to reserved path {flame_graph_path!r}. Does it contain a reserved character?')
 
         # Ensure output path isn't occupied or we are fine with overwriting
         if flame_graph_path is not None and os.path.exists(flame_graph_path):
             should_overwrite: bool = warning_message(f'The path {os.path.normpath(flame_graph_path)!r} already exists! Overwrite it?', ask_yes_no=True)
             if not should_overwrite:
-                parser.exit()
+                return 0
 
         # Locate flame graph root node by gradually moving it down the tree as needed
         flame_root: winflame.FileNode = file_tree_root
         if args.flame_root is not None:
             # Ensure path is relative
             if os.path.isabs(args.flame_root):
-                exit_with_error(parser, f'Flame root path {args.flame_root!r} is absolute; it must be relative to the file tree root.')
+                return error_message(f'Flame root path {args.flame_root!r} is absolute; it must be relative to the file tree root.')
 
             # Ensure path does not back out
             normalized_flame_root_path: str = os.path.normpath(args.flame_root)
             if normalized_flame_root_path.startswith('..'):
-                exit_with_error(parser, f'Flame root path {args.flame_root!r} backs out too far; it must be on the file tree.')
+                return error_message(f'Flame root path {args.flame_root!r} backs out too far; it must be on the file tree.')
 
             # Traverse path
             for path_segment in normalized_flame_root_path.split(os.path.sep):
@@ -981,7 +979,7 @@ Cache:          {CACHE_DIR}
                         # Case-insensitive check
                         flame_root = children_lower[path_segment.lower()]
                     else:
-                        exit_with_error(parser, f'Couldn\'t find flame root {normalized_flame_root_path!r} on file tree (first missing path segment is {path_segment!r}).')
+                        return error_message(f'Couldn\'t find flame root {normalized_flame_root_path!r} on file tree (first missing path segment is {path_segment!r}).')
 
                 # Finish handling alternate data stream
                 if stream_suffix is not None:
@@ -997,7 +995,7 @@ Cache:          {CACHE_DIR}
                         # Case-insensitive check
                         flame_root = children_lower[stream_suffix.lower()]
                     else:
-                        exit_with_error(parser, f'Couldn\'t find flame root {normalized_flame_root_path!r} on file tree (couldn\'t find alternate data stream {stream_suffix!r} of file {path_segment!r}).')
+                        return error_message(f'Couldn\'t find flame root {normalized_flame_root_path!r} on file tree (couldn\'t find alternate data stream {stream_suffix!r} of file {path_segment!r}).')
 
         # Compute font size for labels
         font_size: float
@@ -1015,7 +1013,7 @@ Cache:          {CACHE_DIR}
         else:
             # Ensure file exists
             if not os.path.isfile(args.font_file):
-                exit_with_error(parser, f'Failed to load font {os.path.normpath(args.font_file)!r}; file does not exist.')
+                return error_message(f'Failed to load font {os.path.normpath(args.font_file)!r}; file does not exist.')
 
             # Get file extension
             font_file_extension: str = os.path.splitext(args.font_file)[1].lower()
@@ -1090,8 +1088,11 @@ Cache:          {CACHE_DIR}
         generic_message(f'\nType {parser.prog} --help for detailed help.')
 
 
+    return 0
+
+
 if __name__ == '__main__':
-    cli()
+    sys.exit(cli())
 
 
 
@@ -1122,14 +1123,13 @@ __all__ = [
     'loading_message',
     'success_message',
     'warning_message',
-    'exit_with_error',
+    'error_message',
     'int_in_range',
     'hex_color',
     'hex_color_rgb',
     'hex_color_rgba',
 
     'NewlinePreservingHelpFormatter',
-    'SpacedOutErrorArgumentParser',
 
     'cli',
 ]
