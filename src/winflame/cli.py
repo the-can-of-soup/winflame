@@ -438,7 +438,8 @@ def cli(args: list[str] | None = None) -> int:
     # IMPORTANT:
     #
     # When modifying these arguments, don't forget to run `winflame --help` and update the "Command-Line Usage" section
-    # of README.md with the result!
+    # of README.md with the result! When running the command, the width of the terminal should be 120 columns (the
+    # default on my system).
 
 
     input_options_parent = parser.add_argument_group('Input options',
