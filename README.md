@@ -219,32 +219,32 @@ Miscellaneous options:
 
 - `winflame -b C:\ -cFV`
   
-  Builds a file tree of the `C:` drive (`-b C:\`), caches it for reuse (`-c`), creates a flame graph with the default filename and location (`-F`), and opens it (`-V`).
+    Builds a file tree of the `C:` drive (`-b C:\`), caches it for reuse (`-c`), creates a flame graph with the default filename and location (`-F`), and opens it in the default image application (`-V`).
 
 
 - `winflame -rp`
 
-  Retrieves the cached file tree (`-r`) and creates a flame graph and opens it in the default image application without saving it (`-p`).
+    Retrieves the cached file tree (`-r`) and creates a flame graph and opens it in the default image application without saving it (`-p`).
 
 
 - `winflame -rI`
 
-  Retrieves the cached file tree (`-r`) and prints info about it (`-I`).
+    Retrieves the cached file tree (`-r`) and prints info about it (`-I`).
 
 
 - `winflame -b C:\ -e C_drive.wftree -I`
 
-  Builds a file tree of the `C:` drive (`-b C:\`), exports it to the file `C_drive.wftree` (`-e C_drive.wftree`), and prints info about it (`-I`).
+    Builds a file tree of the `C:` drive (`-b C:\`), exports it to the file `C_drive.wftree` (`-e C_drive.wftree`), and prints info about it (`-I`).
 
 
 - `winflame -i C_drive.wftree -pB 0000`
 
-  Loads an exported file tree from the file `C_drive.wftree` (`-i C_drive.wftree`), creates a flame graph with a transparent background (`-B 0000`) and opens it in the default image application without saving it (`-p`).
+    Loads an exported file tree from the file `C_drive.wftree` (`-i C_drive.wftree`), creates a flame graph with a transparent background (`-B 0000`) and opens it in the default image application without saving it (`-p`).
 
 
 - `winflame -b C:\Users\soup\Videos -ce videos.wftree -IVf videos_distribution.png -Pw 1000 -g C:\Windows\Fonts\consola.ttf -B 0000 -a fff -T fff`
 
-  Builds a file tree of the `C:\Users\soup\Videos` folder (`-b C:\Users\soup\Videos`), caches it for reuse (`-c`), exports it to the file `videos.wftree` (`-e videos.wftree`), prints info about it (`-I`), creates a flame graph and saves it to `videos_distribution.png` (`-f videos_distribution.png`), opens it (`-V`), makes it 1000 pixels wide (`-w 1000`), uses the Consolas font (`-g C:\Windows\Fonts\consola.ttf`), uses a transparent background (`-B 0000`), and colors borders (`-a fff`) and labels (`-T fff`) white.
+    Builds a file tree of the `C:\Users\soup\Videos` folder (`-b C:\Users\soup\Videos`), caches it for reuse (`-c`), exports it to the file `videos.wftree` (`-e videos.wftree`), prints info about it (`-I`), creates a flame graph and saves it to `videos_distribution.png` (`-f videos_distribution.png`), opens it in the default image application (`-V`), makes it 1000 pixels wide (`-w 1000`), uses the Consolas font (`-g C:\Windows\Fonts\consola.ttf`), uses a transparent background (`-B 0000`), and colors borders (`-a fff`) and labels (`-T fff`) white.
 
 
 
@@ -252,10 +252,10 @@ Miscellaneous options:
 
 WinFlame provides access to its interfaces via the `winflame` import package. While the module is not the primary purpose of this project, all of its interfaces have informative docstrings.
 
-
 When using Python's built-in `help` function, use `help(winflame.winflame)` rather than just `help(winflame)` for documentation on the core module (which is what supplies the majority of the interfaces of `winflame`).
 
-Example usage:
+
+### Example usage
 
 ```pycon
 >>> import winflame
@@ -264,6 +264,16 @@ Example usage:
 <FileNode: Root directory 'C:\\Users\\soup\\Videos'>
 >>> root_node.is_drive_root
 False
+>>> for node in root_node.descendants_iter(include_self=True):
+...     if node.can_store_data:
+...         print(f'{node.path:<50} {winflame.format_data_size(node.physical_size)}')
+C:\Users\soup\Videos\epic_video_1.mp4              2.17 GiB
+C:\Users\soup\Videos\epic_video_2.mp4              784.9 MiB
+C:\Users\soup\Videos\epic_video_3.mp4              1.53 GiB
+C:\Users\soup\Videos\mid_videos\mid_video_1.mp4    4.32 GiB
+C:\Users\soup\Videos\mid_videos\mid_video_2.mp4    326.85 MiB
+C:\Users\soup\Videos\video_from_online.mp4         64.5 MiB
+C:\Users\soup\Videos\video_from_online.mp4:Zone.Identifier:$DATA 243 B
 >>> root_node.create_flame_graph().save('videos_storage_distribution.png')
 >>> status = winflame.cli.cli(['--delete-cache'])
 There is no cached file tree.
