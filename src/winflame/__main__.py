@@ -13,5 +13,4 @@ import sys
 
 # MAIN
 
-if __name__ == '__main__':
-    sys.exit(cli.cli())
+sys.exit(cli.cli())
