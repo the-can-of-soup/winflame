@@ -64,6 +64,8 @@ winflame 1.0.3 running on Windows-11 with CPython 3.13.2
 
 It can also be called with `py -m winflame`. This can be used e.g. if the `winflame` command is not on PATH for whatever reason.
 
+### Reference
+
 To view the usage reference, run `winflame --help`:
 
 ```
@@ -211,6 +213,38 @@ Miscellaneous options:
   -s, --silent          Suppress all output except errors and warnings.
   -n, --no-warnings     Suppress all warnings including yes/no prompts, which will assume the answer "yes".
 ```
+
+
+### Example commands
+
+- `winflame -b C:\ -cFV`
+  
+  Builds a file tree of the `C:` drive (`-b C:\`), caches it for reuse (`-c`), creates a flame graph with the default filename and location (`-F`), and opens it (`-V`).
+
+
+- `winflame -rp`
+
+  Retrieves the cached file tree (`-r`) and creates a flame graph and opens it in the default image application without saving it (`-p`).
+
+
+- `winflame -rI`
+
+  Retrieves the cached file tree (`-r`) and prints info about it (`-I`).
+
+
+- `winflame -b C:\ -e C_drive.wftree -I`
+
+  Builds a file tree of the `C:` drive (`-b C:\`), exports it to the file `C_drive.wftree` (`-e C_drive.wftree`), and prints info about it (`-I`).
+
+
+- `winflame -i C_drive.wftree -pB 0000`
+
+  Loads an exported file tree from the file `C_drive.wftree` (`-i C_drive.wftree`), creates a flame graph with a transparent background (`-B 0000`) and opens it in the default image application without saving it (`-p`).
+
+
+- `winflame -b C:\Users\soup\Videos -ce videos.wftree -IVf videos_distribution.png -Pw 1000 -g C:\Windows\Fonts\consola.ttf -B 0000 -a fff -T fff`
+
+  Builds a file tree of the `C:\Users\soup\Videos` folder (`-b C:\Users\soup\Videos`), caches it for reuse (`-c`), exports it to the file `videos.wftree` (`-e videos.wftree`), prints info about it (`-I`), creates a flame graph and saves it to `videos_distribution.png` (`-f videos_distribution.png`), opens it (`-V`), makes it 1000 pixels wide (`-w 1000`), uses the Consolas font (`-g C:\Windows\Fonts\consola.ttf`), uses a transparent background (`-B 0000`), and colors borders (`-a fff`) and labels (`-T fff`) white.
 
 
 
