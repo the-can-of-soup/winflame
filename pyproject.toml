@@ -58,10 +58,9 @@ requires-python = ">= 3.10"
 
 [project.urls]
 
-homepage = "https://pypi.org/project/winflame"
-github = "https://github.com/the-can-of-soup/winflame"
-repository = "https://github.com/the-can-of-soup/winflame.git"
-issues = "https://github.com/the-can-of-soup/winflame/issues"
+Homepage = "https://pypi.org/project/winflame"
+GitHub = "https://github.com/the-can-of-soup/winflame"
+Issues = "https://github.com/the-can-of-soup/winflame/issues"
 
 
 # Terminal command configuration
