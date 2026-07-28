@@ -4,6 +4,8 @@
 
 A command-line utility for generating flame graphs of file trees on Windows.
 
+These graphs show files and folders as blocks, where the width is the amount of storage thay take up, and blocks on top of another block mean that they are in that folder.
+
 These can be useful for simultaneously identifying which files and folders are taking up the most storage on your system. For privacy reasons I do not have any example graphs of a full drive scan on this page, but that is a good use for this program.
 
 
@@ -11,7 +13,7 @@ These can be useful for simultaneously identifying which files and folders are t
 ## Showcase
 
 ![Example flame graph with red-orange, orange, and yellow blocks on a transparent background](https://github.com/the-can-of-soup/winflame/blob/main/docs/assets/example.png?raw=true)\
-_In this example, the red-orange blocks are directories, the orange blocks are files, and the yellow blocks are alternate data streams. The width of the blocks is proportional to their size on disk._
+_In this example, the red-orange blocks are directories, the orange blocks are files, and the yellow blocks are alternate data streams._
 
 This example was generated with the command `winflame -b example -FPw 1000 -H 30 -G 20 -m 16 -B #0000 -0 #f64f -1 #fa4f -2 #ff4f`,
 after generating the `example` folder using [a script](https://github.com/the-can-of-soup/winflame/blob/main/scripts/generate_example.py).
