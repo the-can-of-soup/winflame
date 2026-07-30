@@ -590,8 +590,9 @@ Allowed values:
     'special': Labels on special segments are shown. See help on -S for more info.
     'all': All labels are shown.
 ''')
-    flame_graph_options.add_argument('-W', '--min-label-width', type=int_in_range(1, None), default=15,
-        help='Minimum width of a rectangle in pixels for a label to be drawn on it. (Default: 15)')
+    flame_graph_options.add_argument('-W', '--min-label-width', type=float_in_range(1, None), default=15.0,
+        help='Minimum width of a rectangle in pixels for a label to be drawn on it (may be fractional). (Default:'
+            + ' 15.0)')
     flame_graph_options.add_argument('-P', '--hide-full-root-path', action='store_true', # -P for "private"
         help='Show only the filename part of the flame root\'s path on its label. Has no effect on drive roots.')
     flame_graph_options.add_argument('-g', '--font-file', # -g because I ran out of letters

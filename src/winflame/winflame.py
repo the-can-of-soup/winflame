@@ -1317,7 +1317,7 @@ class FileNode:
             width: int = 1920,
             layer_height: int = 20,
             label_visibility: LabelVisibility = LabelVisibility.ALL,
-            min_label_width: int = 15,
+            min_label_width: float = 15.0,
             hide_full_root_path: bool = False,
             font: ImageFont.ImageFont | ImageFont.FreeTypeFont | None = None,
             show_drive_free_space: bool = True,
@@ -1353,7 +1353,7 @@ class FileNode:
         :type label_visibility: LabelVisibility
         :param min_label_width: If a rectangle is less than this many pixels wide, its label will not be drawn. Note
             that lower values may take longer to render due to increased overall label count. Must be at least ``1``.
-        :type min_label_width: int
+        :type min_label_width: float
         :param hide_full_root_path: If ``True``, only the filename part of the node's path is shown on its label. Has no
             effect on drive roots.
         :type hide_full_root_path: bool
