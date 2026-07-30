@@ -148,7 +148,8 @@ Flame graph options:
                             'all': All labels are shown.
 
   -W, --min-label-width MIN_LABEL_WIDTH
-                        Minimum width of a rectangle in pixels for a label to be drawn on it. (Default: 15)
+                        Minimum width of a rectangle in pixels for a label to be drawn on it (may be fractional).
+                        (Default: 15.0)
   -P, --hide-full-root-path
                         Show only the filename part of the flame root's path on its label. Has no effect on drive
                         roots.
@@ -156,8 +157,8 @@ Flame graph options:
                         Font file to use for labels. Accepts TTF, OTF, PCF, BDF, and PIL font files. If omitted, a
                         default font is used.
   -G, --font-size FONT_SIZE
-                        Font size to use for labels in pixels. This only has an effect if a TTF or OTF font file is
-                        used. If omitted, 60% of the value of -H is used, with a cap of 10.
+                        Font size to use for labels in pixels (may be fractional). This only has an effect if a TTF or
+                        OTF font file is used. If omitted, 60% of the value of -H is used, with a cap of 10.
   -S, --special {none,unaccounted,unaccounted-free,all}
                         Visibility of special segments. (Default: 'all')
 
