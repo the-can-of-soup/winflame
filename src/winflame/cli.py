@@ -501,6 +501,12 @@ def cli(args: list[str] | None = None) -> int:
         prefix_chars = '-/',
         formatter_class = NewlinePreservingHelpFormatter,
         exit_on_error = False, # We manually handle parsing errors
+        epilog = '''
+Exit code:
+  0: The operation completed successfully.
+  1: An error was encountered.
+  2: The operation was cancelled by the user.
+'''.strip()
     )
 
 
