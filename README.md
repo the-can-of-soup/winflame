@@ -123,7 +123,7 @@ Output configuration options:
 
 Flame graph options:
   Configuration for the flame graph when using -f, -F, or -p. All color options are hex color codes supporting RGB and
-  RGBA with the '#' prefix being optional.
+  RGBA with an optional '#' prefix.
 
   -R, --flame-root FLAME_ROOT
                         Build the flame graph from a different node of the file tree than the root. If provided, this
