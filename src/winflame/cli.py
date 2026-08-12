@@ -963,7 +963,7 @@ Cache:          {CACHE_DIR}
         if os.path.exists(file_tree_path):
             should_overwrite: bool = warning_message(f'The path {os.path.normpath(file_tree_path)!r} already exists! Overwrite it?', ask_yes_no=True)
             if not should_overwrite:
-                return 0
+                return 2
 
         # Export
         loading_message('Exporting file tree...')
@@ -993,7 +993,7 @@ Cache:          {CACHE_DIR}
         if flame_graph_path is not None and os.path.exists(flame_graph_path):
             should_overwrite: bool = warning_message(f'The path {os.path.normpath(flame_graph_path)!r} already exists! Overwrite it?', ask_yes_no=True)
             if not should_overwrite:
-                return 0
+                return 2
 
         # Locate flame graph root node by gradually moving it down the tree as needed
         flame_root: winflame.FileNode = file_tree_root
