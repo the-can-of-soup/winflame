@@ -83,7 +83,7 @@ Create flame graphs to visualize file storage space.
 Input options:
   Use one of these options to choose how to obtain a file tree.
 
-  -b, --build-from, -t, --target ROOT
+  -b, --build-from, --build-tree, -t, --target ROOT
                         A file or directory to build the file tree from, called the "root" of the file tree.
   -i, --tree-in TREE_IN
                         A tree file to load that was created with -e. These files cannot be shared, as allowing this
@@ -122,8 +122,8 @@ Output configuration options:
                         (implied when using -p).
 
 Flame graph options:
-  Configuration for the flame graph when using -f, -F, or -p. All color options are hex color codes supporting RGB
-  and RGBA with the '#' prefix being optional.
+  Configuration for the flame graph when using -f, -F, or -p. All color options are hex color codes supporting RGB and
+  RGBA with the '#' prefix being optional.
 
   -R, --flame-root FLAME_ROOT
                         Build the flame graph from a different node of the file tree than the root. If provided, this
@@ -142,10 +142,10 @@ Flame graph options:
                         Visibility of labels. (Default: 'all')
 
                         Allowed values:
-                            'none': All labels are hidden.
-                            'files': Labels on file tree nodes are shown.
-                            'special': Labels on special segments are shown. See help on -S for more info.
-                            'all': All labels are shown.
+                          'none': All labels are hidden.
+                          'files': Labels on file tree nodes are shown.
+                          'special': Labels on special segments are shown. See help on -S for more info.
+                          'all': All labels are shown.
 
   -W, --min-label-width MIN_LABEL_WIDTH
                         Minimum width of a rectangle in pixels for a label to be drawn on it (may be fractional).
@@ -163,26 +163,26 @@ Flame graph options:
                         Visibility of special segments. (Default: 'all')
 
                         Allowed values:
-                            'none': All special segments are hidden.
-                            'unaccounted': The Unaccounted special segment is shown if available.
-                            'unaccounted-free': The Unaccounted and Free special segments are shown if available.
-                            'all': All special segments are shown if available.
+                          'none': All special segments are hidden.
+                          'unaccounted': The Unaccounted special segment is shown if available.
+                          'unaccounted-free': The Unaccounted and Free special segments are shown if available.
+                          'all': All special segments are shown if available.
 
                         Special segments:
-                            Special segments are extra rectangles that get drawn on the flame graph at the bottom
-                            layer to display information about the drive, and they are only available if the root of
-                            the graph is a drive root. Additionally, special segments are always hidden if -L is
-                            supplied because they have no logical size equivalents.
+                          Special segments are extra rectangles that get drawn on the flame graph at the bottom layer
+                          to display information about the drive, and they are only available if the root of the graph
+                          is a drive root. Additionally, special segments are always hidden if -L is supplied because
+                          they have no logical size equivalents.
 
-                            Free: Represents the amount of free (unused) space on the drive. Extra-counted space is
-                            subtracted from this.
-                            Unaccounted*: Represents the amount of used space on the drive that the program could not
-                            identify the source of.
-                            Extra-counted*: Represents the amount of unused space on the drive that the program
-                            actually over-counted as used by files.
+                          Free: Represents the amount of free (unused) space on the drive. Extra-counted space is
+                          subtracted from this.
+                          Unaccounted*: Represents the amount of used space on the drive that the program could not
+                          identify the source of.
+                          Extra-counted*: Represents the amount of unused space on the drive that the program actually
+                          over-counted as used by files.
 
-                            *This special segment is not available unless the file tree was built with administrator
-                            privileges due to Windows API limitations.
+                          *This special segment is not available unless the file tree was built with administrator
+                          privileges due to Windows API limitations.
 
   -B, --bg-color, --background-color BG_COLOR
                         Color of the graph's background. (Default: #ffff)
@@ -215,6 +215,11 @@ Miscellaneous options:
                         Delete the file tree cached with -c (if there is one) and exit.
   -s, --silent          Suppress all output except errors and warnings.
   -n, --no-warnings     Suppress all warnings including yes/no prompts, which will assume the answer "yes".
+
+Exit code:
+  0: The operation completed successfully.
+  1: An error was encountered.
+  2: The operation was cancelled by the user.
 ```
 
 
