@@ -223,7 +223,7 @@ Exit code:
 ```
 
 
-### Example commands
+### Example usage
 
 - `winflame -b C:\ -cFV`
   
