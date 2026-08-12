@@ -521,7 +521,7 @@ Exit code:
         description='Use one of these options to choose how to obtain a file tree.')
     input_options = input_options_parent.add_mutually_exclusive_group()
 
-    input_options.add_argument('-b', '--build-from', '-t', '--target', metavar='ROOT',
+    input_options.add_argument('-b', '--build-from', '--build-tree', '-t', '--target', metavar='ROOT',
         help='A file or directory to build the file tree from, called the "root" of the file tree.')
     input_options.add_argument('-i', '--tree-in', # -i for "in" or "import"
         help='A tree file to load that was created with -e. These files cannot be shared, as allowing this would allow'
