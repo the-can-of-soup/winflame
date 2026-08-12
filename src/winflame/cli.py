@@ -452,6 +452,7 @@ class NewlinePreservingHelpFormatter(argparse.HelpFormatter):
             indentation_level = max(0, min(indentation_level, width - 5))
 
             # Wrap line
+            # noinspection PyProtectedMember
             wrapped_parts: list[str] = super()._split_lines(explicit_line, width - indentation_level)
 
             # Re-apply indentation
