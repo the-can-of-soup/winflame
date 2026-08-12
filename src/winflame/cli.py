@@ -463,6 +463,9 @@ class NewlinePreservingHelpFormatter(argparse.HelpFormatter):
 
         return result_lines
 
+    def _fill_text(self, text: str, width: int, indent: str) -> str:
+        return '\n'.join(indent + line for line in self._split_lines(text, width))
+
 
 
 # MAIN
