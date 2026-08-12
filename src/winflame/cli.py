@@ -572,7 +572,7 @@ Exit code:
 
     flame_graph_options = parser.add_argument_group('Flame graph options',
         description='Configuration for the flame graph when using -f, -F, or -p. All color options are hex color codes'
-        + ' supporting RGB and RGBA with the \'#\' prefix being optional.')
+        + ' supporting RGB and RGBA with an optional \'#\' prefix.')
 
     flame_graph_options.add_argument('-R', '--flame-root',
         help='Build the flame graph from a different node of the file tree than the root. If provided, this should be a'
