@@ -856,7 +856,15 @@ Cache:          {CACHE_DIR}
                 + ' administrator privileges. Not all information may be available, for example drive capacity and'
                 + ' system file sizes. Continue anyway?', ask_yes_no=True)
             if not should_continue:
-                return 0
+                return 2
+
+        # Show warning and ask for confirmation if no file tree export option is used
+        if not (output_mode_cache_tree or output_mode_tree_file):
+            should_continue: bool = warning_message('You have not selected an option such as -c to save the file tree.'
+                + ' If for example you want to tweak settings and regenerate a flame graph, you will need to build the'
+                + ' file tree again. Continue anyway?', ask_yes_no=True)
+            if not should_continue:
+                return 2
 
         # Build file tree
         loading_message('Building file tree...')
