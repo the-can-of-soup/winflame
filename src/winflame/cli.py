@@ -586,10 +586,10 @@ def cli(args: list[str] | None = None) -> int:
         help='''Visibility of labels. (Default: 'all')
 
 Allowed values:
-    'none': All labels are hidden.
-    'files': Labels on file tree nodes are shown.
-    'special': Labels on special segments are shown. See help on -S for more info.
-    'all': All labels are shown.
+  'none': All labels are hidden.
+  'files': Labels on file tree nodes are shown.
+  'special': Labels on special segments are shown. See help on -S for more info.
+  'all': All labels are shown.
 ''')
     flame_graph_options.add_argument('-W', '--min-label-width', type=float_in_range(1, None), default=15.0,
         help='Minimum width of a rectangle in pixels for a label to be drawn on it (may be fractional). (Default:'
@@ -608,23 +608,23 @@ Allowed values:
         help='''Visibility of special segments. (Default: 'all')
 
 Allowed values:
-    'none': All special segments are hidden.
-    'unaccounted': The Unaccounted special segment is shown if available.
-    'unaccounted-free': The Unaccounted and Free special segments are shown if available.
-    'all': All special segments are shown if available.
+  'none': All special segments are hidden.
+  'unaccounted': The Unaccounted special segment is shown if available.
+  'unaccounted-free': The Unaccounted and Free special segments are shown if available.
+  'all': All special segments are shown if available.
 
 Special segments:
-    Special segments are extra rectangles that get drawn on the flame graph at the bottom layer to display'''
+  Special segments are extra rectangles that get drawn on the flame graph at the bottom layer to display'''
     + ''' information about the drive, and they are only available if the root of the graph is a drive root.'''
     + ''' Additionally, special segments are always hidden if -L is supplied because they have no logical size'''
     + ''' equivalents.
 
-    Free: Represents the amount of free (unused) space on the drive. Extra-counted space is subtracted from this.
-    Unaccounted*: Represents the amount of used space on the drive that the program could not identify the source of.
-    Extra-counted*: Represents the amount of unused space on the drive that the program actually over-counted as used'''
+  Free: Represents the amount of free (unused) space on the drive. Extra-counted space is subtracted from this.
+  Unaccounted*: Represents the amount of used space on the drive that the program could not identify the source of.
+  Extra-counted*: Represents the amount of unused space on the drive that the program actually over-counted as used'''
     + ''' by files.
     
-    *This special segment is not available unless the file tree was built with administrator privileges due to'''
+  *This special segment is not available unless the file tree was built with administrator privileges due to'''
     + ''' Windows API limitations.
 ''')
 
